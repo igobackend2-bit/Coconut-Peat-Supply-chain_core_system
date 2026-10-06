@@ -1,0 +1,2 @@
+ALTER TABLE "dispatches" DROP CONSTRAINT "dispatches_sales_order_unique";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "dispatches_sales_order_idx" ON "dispatches" USING btree ("sales_order_id");

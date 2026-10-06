@@ -2,41 +2,51 @@ import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@ne
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from './permissions.guard';
 
+type TestUser = { roles?: string[]; permissions: string[] };
+
 describe('PermissionsGuard', () => {
-  function makeContext(user?: { permissions: string[] }): ExecutionContext {
+  function makeContext(user?: TestUser): ExecutionContext {
     return {
       getHandler: () => ({}),
+      getClass: () => ({}),
       switchToHttp: () => ({ getRequest: () => ({ user }) }),
     } as unknown as ExecutionContext;
   }
+  const guardRequiring = (codes: string[] | undefined) =>
+    new PermissionsGuard({ getAllAndOverride: jest.fn().mockReturnValue(codes) } as unknown as Reflector);
 
-  it('allows the request through when no permissions are required', () => {
-    const reflector = { get: jest.fn().mockReturnValue(undefined) } as unknown as Reflector;
-    const guard = new PermissionsGuard(reflector);
+  it('allows the request through when no permissions are required and no user is attached', () => {
+    expect(guardRequiring(undefined).canActivate(makeContext())).toBe(true);
+  });
 
-    expect(guard.canActivate(makeContext())).toBe(true);
+  it('allows an undeclared route for a user who holds at least one role', () => {
+    expect(guardRequiring(undefined).canActivate(makeContext({ roles: ['OPERATOR'], permissions: [] }))).toBe(true);
+  });
+
+  it('denies an undeclared route for an authenticated user with no roles', () => {
+    expect(() => guardRequiring(undefined).canActivate(makeContext({ roles: [], permissions: [] }))).toThrow(ForbiddenException);
   });
 
   it('throws Unauthorized if permissions are required but no user is attached (guard ordering bug)', () => {
-    const reflector = { get: jest.fn().mockReturnValue(['master_data.product.write']) } as unknown as Reflector;
-    const guard = new PermissionsGuard(reflector);
-
-    expect(() => guard.canActivate(makeContext(undefined))).toThrow(UnauthorizedException);
+    expect(() => guardRequiring(['master_data.product.write']).canActivate(makeContext(undefined))).toThrow(UnauthorizedException);
   });
 
   it('throws Forbidden when the user is missing a required permission', () => {
-    const reflector = { get: jest.fn().mockReturnValue(['master_data.product.write']) } as unknown as Reflector;
-    const guard = new PermissionsGuard(reflector);
-
-    expect(() => guard.canActivate(makeContext({ permissions: ['master_data.product.read'] }))).toThrow(
-      ForbiddenException,
-    );
+    expect(() =>
+      guardRequiring(['master_data.product.write']).canActivate(makeContext({ roles: ['X'], permissions: ['master_data.product.read'] })),
+    ).toThrow(ForbiddenException);
   });
 
   it('allows the request through when the user has all required permissions', () => {
-    const reflector = { get: jest.fn().mockReturnValue(['a', 'b']) } as unknown as Reflector;
-    const guard = new PermissionsGuard(reflector);
+    expect(guardRequiring(['a', 'b']).canActivate(makeContext({ roles: ['X'], permissions: ['a', 'b', 'c'] }))).toBe(true);
+  });
 
-    expect(guard.canActivate(makeContext({ permissions: ['a', 'b', 'c'] }))).toBe(true);
+  it('reads metadata from both the handler and the class, so a class-level declaration is enforced', () => {
+    const getAllAndOverride = jest.fn().mockReturnValue(['audit.event.read']);
+    const guard = new PermissionsGuard({ getAllAndOverride } as unknown as Reflector);
+    const ctx = makeContext({ roles: ['X'], permissions: [] });
+
+    expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
+    expect(getAllAndOverride).toHaveBeenCalledWith(expect.any(String), [expect.anything(), expect.anything()]);
   });
 });

@@ -3,13 +3,13 @@ services:
     build:
       context: .
       dockerfile: core.dockerfile
-    image: harith2001/coco-core
+    image: ${DOCKERHUB_USERNAME:-local}/coco-core
     container_name: Core
     environment:
-      - MQTT_BROKER=ssl://34f3f472652e44989715e359655e32dc.s1.eu.hivemq.cloud:8883
+      - MQTT_BROKER=${MQTT_BROKER:?Set MQTT_BROKER in .env}
       - CLIENT_ID=CoreClient
-      - MQTT_USERNAME=harith
-      - MQTT_PASSWORD=Harith123
+      - MQTT_USERNAME=${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
     ports:
       - "50051:50051"
 
@@ -17,15 +17,15 @@ services:
     build:
       context: ./plugins/grading
       dockerfile: grading.dockerfile
-    image: harith2001/coco-grading
+    image: ${DOCKERHUB_USERNAME:-local}/coco-grading
     container_name: Grading
     volumes:
       - ./plugins/grading:/app
     environment:
-      - MQTT_BROKER=ssl://34f3f472652e44989715e359655e32dc.s1.eu.hivemq.cloud:8883
+      - MQTT_BROKER=${MQTT_BROKER:?Set MQTT_BROKER in .env}
       - CLIENT_ID=GradingPluginSubscriber
-      - MQTT_USERNAME=harith
-      - MQTT_PASSWORD=Harith123
+      - MQTT_USERNAME=${MQTT_USERNAME:?Set MQTT_USERNAME in .env}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:?Set MQTT_PASSWORD in .env}
     ports:
       - "50052:50052" 
 
@@ -33,7 +33,7 @@ services:
     build:
       context: ./plugins/cutting
       dockerfile: cutting.dockerfile
-    image: harith2001/coco-cutting
+    image: ${DOCKERHUB_USERNAME:-local}/coco-cutting
     container_name: Cutting
     volumes:
       - ./plugins/cutting:/app

@@ -23,6 +23,12 @@ kept in sync. Migrations live at the repo-root `database/migrations/`
 | 0005 | `0005_phase4_inventory_stock_ledger.sql` | Inventory domain — `stock_ledger` (1 table) |
 | 0006 | `0006_enforce_stock_ledger_append_only.sql` | DB-level triggers blocking `UPDATE`/`DELETE` on `stock_ledger`, same pattern as 0001 for `audit_events` |
 | 0007 | `0007_add_raw_material_receipt_movement_type.sql` | Adds `RAW_MATERIAL_RECEIPT` to `stock_movement_type` enum — found missing via live testing, see "Inventory domain" below |
+| 0008 | `0008_naive_morlocks.sql` | Packing domain — `packing_orders`, `packing_lots` (2 tables) — auto-generated name, kept as-is (same convention as `0000_optimal_miek.sql`) |
+| 0009 | `0009_strange_devos.sql` | Sales domain — `sales_orders`, `sales_order_items` (2 tables) — auto-generated name, kept as-is |
+| 0010 | `0010_redundant_molecule_man.sql` | Dispatch domain — `dispatches` (1 table) — auto-generated name, kept as-is |
+| 0011 | `0011_foamy_husk.sql` | Drops `dispatches_sales_order_unique`, adds a plain `dispatches_sales_order_idx` — found-and-fixed bug, see "Dispatch domain" below |
+| 0012 | `0012_dark_sabretooth.sql` | Export (6 tables), Maintenance (4), Workforce (3), Finance (3), Memory (1), AI (3) — 20 tables, plus their enums. Postgres prints a `truncate_identifier` NOTICE while applying: a couple of auto-generated foreign-key names exceed 63 characters and are truncated, which is harmless |
+| 0013 | `0013_puzzling_ultimo.sql` | `dispatch_lots` — which packed lots shipped on which dispatch (traceability to the customer) |
 
 ## Identity domain (`apps/api/src/db/schema/identity.schema.ts`)
 
@@ -141,6 +147,119 @@ Production retrofit showed a raw material's computed balance going
 permanently negative because nothing had ever credited a receipt. See
 `docs/changelog.md` for the found-and-fixed transcript.
 
+## Packing domain (`apps/api/src/db/schema/packing.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `packing_orders` | Converts a `RELEASED` production batch's finished-good output into packaged units of a given packaging type. Status: `PENDING → IN_PROGRESS` (on first lot) `→ COMPLETED`. Creation is rejected (409) unless the referenced batch is `RELEASED` — enforced in `PackingService.create()`, not just a UI hint | → `production_batches`, `packaging_types` |
+| `packing_lots` | Individual packed lots recorded against an order. `lot_number` is server-generated (`PKG-<date>-<random>`) and **UNIQUE** — stands in as the traceable identifier for this MVP (real QR code generation deferred, see `docs/api.md` "Packing") | → `packing_orders`, `products` |
+
+No `stock_ledger` entry is written by Packing — repackaging finished
+goods into units doesn't change total kg on hand, and `packaging_types`'
+own consumable stock (`packaging_inventory`) is separately deferred (see
+"Inventory domain" above).
+
+## Sales domain (`apps/api/src/db/schema/sales.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `sales_orders` | `order_number` is server-generated (`SO-<date>-<random>`) and **UNIQUE**. `total_amount` is a server-maintained denormalized sum (recomputed after every item add), never trusted from the client. Status: `DRAFT → CONFIRMED` or `→ CANCELLED` | → `customers` |
+| `sales_order_items` | `line_total` is server-computed (`quantity * unit_price`) at insert time, not stored as a generated column — kept as a plain numeric so it stays a portable value if the pricing formula changes later | → `sales_orders`, `products` |
+
+**Credit limit enforcement** happens only at `POST /sales-orders/:id/confirm`,
+computed as `SUM(total_amount)` over the customer's other `CONFIRMED`
+orders plus this order's total, checked against `customers.credit_limit`
+(nullable — not every customer has one, and a `null` limit skips the
+check). This is a hard 409, not an approval-workflow gate like
+Procurement's PO threshold — see `docs/api.md` "Sales" for why an
+`approvals`-based override was deliberately not built yet.
+
+## Dispatch domain (`apps/api/src/db/schema/dispatch.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `dispatches` | Tracks physical outbound movement against a sales order. Status: `PENDING → DISPATCHED → DELIVERED`, cancellable from `PENDING` or `DISPATCHED`. Delivery confirmation is folded into `delivered_at`/`delivery_notes` rather than a separate table | → `sales_orders`, `vehicles` (Gate & Weighment), `drivers` (nullable) |
+
+**A found-and-fixed bug, caught by live testing, not code review**: the
+first version had a hard `UNIQUE(sales_order_id)` column constraint,
+intended as "one dispatch per order." In practice it meant a single
+`CANCELLED` dispatch permanently blocked ever dispatching that order
+again — cancel-and-redispatch is a completely normal flow this broke.
+Fixed (migration `0011_foamy_husk.sql`) by dropping the DB-level unique
+constraint and enforcing "at most one **active** (non-`CANCELLED`)
+dispatch per order" as a service-level check instead, backed by a plain
+index for lookup speed rather than a uniqueness guarantee. Re-verified
+live both ways: redispatch after cancellation now succeeds, and a
+second dispatch while one is still active still correctly 409s.
+
+`gate_entries.direction = OUTBOUND` reuse (the design
+gate-weighment.schema.ts's own doc comment names as the intended Phase 4
+approach) is **not** wired up — `gate_entries` has no customer
+reference today, so real dispatch/gate-out integration is separate,
+deferred work, not a half-wired FK.
+
+### `dispatch_lots` (Dispatch domain, migration 0013)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `dispatch_lots` | Links a packed lot to the dispatch it ships on. **Not unique on `packing_lot_id`** — a cancelled dispatch frees its lots; "on at most one live dispatch" is enforced in `DispatchService`. Non-unique indexes on both FKs. | → `dispatches`, `packing_lots` |
+
+## Export domain (`export.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `export_customers` | Overseas buyers (carry a country; kept separate from `customers`) | — |
+| `proforma_invoices` | `DRAFT → ISSUED → CONVERTED` / `CANCELLED`; `total_amount` server-maintained | → `export_customers` |
+| `proforma_invoice_items` | `line_total` server-computed | → `proforma_invoices`, `products` |
+| `commercial_invoices` | Created only by converting an `ISSUED` proforma; `ISSUED → PAID` | → `proforma_invoices`, `export_customers` |
+| `containers` | `BOOKED → LOADED → IN_TRANSIT → ARRIVED → DELIVERED`; status follows the latest milestone | → `commercial_invoices` |
+| `shipment_milestones` | Append-only trail (no update/delete path in the API); `milestone` is free text validated in the DTO | → `containers` |
+
+## Maintenance domain (`maintenance.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `maintenance_plans` | Recurring preventive plans (`frequency_days`, `next_due_date`) | → `machines` |
+| `breakdowns` | `OPEN → IN_REPAIR → RESOLVED`; reporting one sets `machines.status = SUSPENDED` | → `machines` |
+| `work_orders` | `PREVENTIVE` (needs a plan) or `CORRECTIVE` (needs a breakdown) | → `machines`, `breakdowns`, `maintenance_plans`, `employees` |
+| `spare_parts` | Integer on-hand with a reorder level; the service refuses to go below zero | — |
+
+`machine_history` is not a table — it is a merge of breakdowns and work
+orders served by `GET /machines/:id/history`.
+
+## Workforce domain (`workforce.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `shifts` | `HH:MM` start/end | — |
+| `attendance` | **UNIQUE(employee_id, work_date)** — one per employee per day | → `employees`, `shifts` |
+| `labour_allocations` | Hours (cap enforced in the service by attendance status) | → `employees`, `production_batches`, `machines` |
+
+## Finance domain (`finance.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `cost_centres` | | — |
+| `expenses` | `SUBMITTED → APPROVED/REJECTED`; `submitted_by` is kept so the service can refuse self-approval | → `cost_centres`, `users` |
+| `payments` | `INCOMING` references a sales order, `OUTGOING` a purchase order | → `sales_orders`, `purchase_orders`, `users` |
+
+Receivables, payables and batch cost are computed on read; nothing is
+stored. See ADR-009.
+
+## Memory domain (`memory.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `memory_items` | 15-value `memory_type`, `status` (`ACTIVE/ARCHIVED/SUPERSEDED`), `sensitivity`, `confidence`, `tags text[]`, `valid_until`, `version` and `supersedes_memory_id` (an edit inserts v n+1 and supersedes the old row) | → `users` |
+
+## AI domain (`ai.schema.ts`)
+
+| Table | Purpose | Key relationships |
+|---|---|---|
+| `ai_agents` | A01–A12 registry; `analyzer_key` is set only where an implementation exists | — |
+| `ai_runs` | One row per analyzer run, with summary / error | → `ai_agents`, `users` |
+| `ai_findings` | `PROPOSED → ACKNOWLEDGED/DISMISSED`; never mutates business data | → `ai_runs`, `ai_agents`, `users` |
+
 ## Cross-cutting design decisions
 
 - **`tenant_id`** is a nullable `uuid` column on every domain table
@@ -195,9 +314,18 @@ and output per entry):
 
 - Inventory: `stock_movements`-level detail beyond the ledger (already
   covered by `stock_ledger` itself), lot/pallet tracking, packaging
-  inventory, a manual `ADJUSTMENT` write endpoint. Sales/Logistics,
-  Maintenance, Workforce, Finance, AI, and Memory domains — see
-  `docs/roadmap.md` Phases 4–6 for the build order.
+  inventory, a manual `ADJUSTMENT` write endpoint.
+- Packing: QR code generation, pallet/container linkage (Inventory's
+  `pallets`, itself deferred).
+- Sales: `quotations`, `invoices`, price list lookup (`unitPrice` is
+  entered directly for now), a credit-limit-breach approval override.
+- Dispatch: `shipments`/`delivery_confirmations` as separate tables,
+  `gate_entries.direction = OUTBOUND` integration.
+- Export: HS codes, bill of lading, customs documents, FX rates.
+- Finance: general ledger, tax, IGO ERP sync (ADR-009).
+- AI: `ai_sessions`, `ai_messages`, `ai_tool_calls`, `ai_approvals`,
+  `ai_executions` (need an LLM; ADR-008). Memory: sources, links,
+  feedback, conflicts, embeddings.
 - Purchase Requisitions, Supplier Rates, Supplier Documents (Procurement
   — deferred, see `docs/roadmap.md` Phase 2).
 - Production Orders, Process Steps (needs its own design), Machine Runs,

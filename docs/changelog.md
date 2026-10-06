@@ -1044,6 +1044,474 @@ and database:
   credentials (Docker Hub password, Ethereum private key, MQTT password)
   also remain unfixed — see "Known Bugs" in `docs/project-state.md`.
 
+## 2026-09-30 — v0.2.4 — Phase 4: Packing (packing orders + lots)
+
+**Module:** Backend / Frontend / Packing
+**Change:** Implemented the Packing domain's core: `packing_orders`
+(converts a production batch's finished-good output into packaged units
+of a given packaging type) and `packing_lots` (individual packed lots
+recorded against an order). A packing order can only be created against
+a production batch whose `status` is `RELEASED` — enforced server-side
+in `PackingService.create()` with a 409 otherwise, not just a UI-level
+restriction, so packing can't be used to route around the Quality gate
+built in Phase 3. Order status lifecycle: `PENDING → IN_PROGRESS` (on
+the first lot) `→ COMPLETED` (locks out further lots). Lot numbers are
+server-generated (`PKG-<date>-<random>`, same scheme as production batch
+numbers) and globally unique.
+**Reason:** Continuing "implement all modules," scoped per this
+session's established pattern to the next concrete item on
+`docs/roadmap.md` — Phase 4's Packing deliverable, which had schema-less
+placeholder status. Chose the RELEASED-batch gate as a real domain rule
+(not a stub) because the whole point of Phase 3's QC hold/release
+mechanism is defeated if packing can happen on unreleased output — this
+mirrors the same reasoning already applied to Production's approval gate
+and Raw Material's origin-derivation-not-caller-supplied rule.
+**Developer/Agent:** Claude (interactive session), approved by user.
+**Affected Files:**
+- `apps/api/src/db/schema/packing.schema.ts` (new — `packing_orders`, `packing_lots`)
+- `apps/api/src/db/schema/enums.ts` (`packingOrderStatusEnum`, `packingLotQcStatusEnum`)
+- `apps/api/src/db/schema/index.ts` (barrel export)
+- `apps/api/src/modules/packing/{packing.service.ts,packing.controller.ts,packing.module.ts,dto/create-packing-order.dto.ts,dto/create-packing-lot.dto.ts}` (new)
+- `apps/api/src/app.module.ts` (imports `PackingModule`)
+- `database/seeds/001-rbac-baseline.sql` (`packing.order.write`, `packing.lot.write`)
+- `apps/web/src/pages/PackingPage.tsx` (new — custom page, same reasoning as `ProductionPage.tsx`: real multi-step workflow, not a plain CRUD list)
+- `apps/web/src/app/routes.tsx` (`packing` wired to `PackingPage`)
+- `apps/web/src/app/routes.spec.tsx` (retargeted placeholder test from `/packing` to `/sales`, since `/packing` is real now)
+- `docs/api.md`, `docs/permissions.md`, `docs/database-schema.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/project-state.md` (updated for real)
+**Database Changes:** `0008_naive_morlocks.sql` (drizzle-kit
+auto-generated name, kept as-is per the `0000_optimal_miek.sql`
+precedent) — creates `packing_lot_qc_status` and `packing_order_status`
+enums, `packing_orders`, `packing_lots`, their FKs and indexes.
+**API Changes:** New `GET/POST /packing-orders`, `GET /packing-orders/:id`,
+`GET/POST /packing-orders/:id/lots`, `POST /packing-orders/:id/complete`
+— see `docs/api.md` "Packing".
+**Migration:** 0008 applied and verified against the local PostgreSQL
+database; `001-rbac-baseline.sql` re-run to grant the 2 new permission
+codes to `SUPER_ADMIN` (idempotent `ON CONFLICT`/cross-join, no new rows
+needed for existing codes).
+**Tests:** No new unit tests (consistent with this project's established
+pattern of verifying DB-heavy services live). Existing suites still
+pass: `apps/api` 15/15, `apps/web` 6/6 (after retargeting the stale
+placeholder test). Both `npm run build` and `npm run lint` clean on both
+apps (`apps/web`'s lint shows the same pre-existing `set-state-in-effect`
+warning pattern already present in `ProductionPage.tsx`/`QualityPage.tsx`/
+`ProcurementPage.tsx` — not a new issue, and not an error).
+**Risk:** Low. Additive module following the exact
+service/controller/DTO/module + `@RequirePermissions` + `@AuditLog`
+pattern proven correct across every prior module this session.
+**Status:** Implemented and verified live against a real running server
+and database:
+- Registered a fresh test user (`packing-test@example.com`), granted
+  `SUPER_ADMIN` via the seed file's documented manual-assignment SQL
+  (no plaintext credentials for the pre-existing `admin@example.com`
+  were available this session, and creating a disposable test account
+  is the same approach already documented for prior sessions' "dummy
+  user" request).
+- Built a full chain via real curl calls: Purchase Order → Goods Receipt
+  → Raw Material Lot → Production Batch → input (300kg) → output (180kg)
+  → complete → release (batch reaches `RELEASED`).
+- Confirmed the domain rule: `POST /packing-orders` against an
+  `IN_PROGRESS` batch correctly 409'd; against the `RELEASED` batch it
+  correctly created a `PENDING` order.
+- Added 2 packing lots — confirmed the order auto-flipped
+  `PENDING → IN_PROGRESS` on the first one, both lots got unique
+  server-generated lot numbers, `GET .../lots` listed both correctly.
+- `POST .../complete` correctly moved the order to `COMPLETED`; a
+  further `POST .../lots` against the now-`COMPLETED` order correctly
+  409'd.
+- Confirmed `audit_events` rows for every action, `status: FAILED` on
+  both rejected attempts (the non-RELEASED-batch order and the
+  post-completion lot) and `status: COMPLETED` on every successful one.
+- Live in the browser: logged in as the test user, navigated to
+  `/packing`, confirmed the order created via curl renders with the
+  correct batch number, packaging type code, status badge, and planned
+  quantity; clicked "Manage," confirmed both lots render with the
+  correct lot number, resolved product SKU, quantity, net weight, and QC
+  status badge; opened the "New Packing Order" form and confirmed its
+  batch dropdown correctly lists only the one `RELEASED` batch (the two
+  `IN_PROGRESS` batches and one `CLOSED` batch are correctly excluded
+  client-side too, matching the backend's 409 gate). Zero console
+  errors throughout.
+- Not yet done: QR code generation, pallet/container linkage (Inventory's
+  `pallets` table, itself deferred), Sales/Logistics, Dispatch, Export,
+  and everything in Phase 5+ (Maintenance, Workforce, Finance, AI,
+  Memory) — see `docs/roadmap.md`. The legacy Go system's hardcoded
+  credentials also remain unfixed — see "Known Bugs" in
+  `docs/project-state.md`.
+
+## 2026-09-30 — v0.2.5 — Phase 4: Sales (sales orders + credit-limit check)
+
+**Module:** Backend / Frontend / Sales
+**Change:** Implemented the Sales domain's core: `sales_orders` and
+`sales_order_items`. An order builds up in `DRAFT` — line items can be
+added freely, with `lineTotal` server-computed per item
+(`quantity * unitPrice`) and the parent order's `totalAmount`
+recomputed via `SUM(line_total)` after every add, never trusted from the
+client. The customer's credit-limit check happens only at
+`POST /:id/confirm`: computed as `SUM(totalAmount)` over the customer's
+other `CONFIRMED` orders plus this order's total, checked against
+`customers.credit_limit` (a schema field that had sat unused since
+Phase 1 — this closes that gap). A breach is a hard 409 naming the exact
+projected exposure and limit, not an approval-workflow gate — Procurement's
+PO-threshold `approvals` mechanism was deliberately not reused here,
+since a credit-limit override wasn't asked for and would be scope
+creep; documented as a natural follow-up if it turns out to be needed.
+**Reason:** Continuing "implement all modules," scoped to the next
+concrete Phase 4 item on `docs/roadmap.md`. Did a short web search first
+(competitor/industry ERP research, at the user's direction) confirming
+the standard shape — quotation → sales order → dispatch → invoice →
+payment, with credit exposure checked at commitment — which matched
+what `product-requirements.md`/`architecture.md` already specified, so
+no design change resulted; it confirmed the credit-limit-at-confirm
+placement rather than changing it.
+**Developer/Agent:** Claude (interactive session), approved by user.
+**Affected Files:**
+- `apps/api/src/db/schema/sales.schema.ts` (new — `sales_orders`, `sales_order_items`)
+- `apps/api/src/db/schema/enums.ts` (`salesOrderStatusEnum`)
+- `apps/api/src/db/schema/index.ts` (barrel export)
+- `apps/api/src/modules/sales/{sales.service.ts,sales.controller.ts,sales.module.ts,dto/create-sales-order.dto.ts,dto/create-sales-order-item.dto.ts}` (new)
+- `apps/api/src/app.module.ts` (imports `SalesModule`)
+- `database/seeds/001-rbac-baseline.sql` (`sales.order.write`, `sales.order.confirm`)
+- `apps/web/src/pages/SalesPage.tsx` (new — custom page, same reasoning as `ProductionPage.tsx`/`PackingPage.tsx`)
+- `apps/web/src/app/routes.tsx` (`sales` wired to `SalesPage`)
+- `apps/web/src/app/routes.spec.tsx` (retargeted placeholder test from `/sales` to `/dispatch`, since `/sales` is real now)
+- `docs/api.md`, `docs/permissions.md`, `docs/database-schema.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/project-state.md` (updated for real)
+**Database Changes:** `0009_strange_devos.sql` (drizzle-kit
+auto-generated name, kept as-is per the established precedent) —
+creates `sales_order_status` enum, `sales_orders`, `sales_order_items`,
+their FKs and indexes.
+**API Changes:** New `GET/POST /sales-orders`, `GET /sales-orders/:id`,
+`GET/POST /sales-orders/:id/items`, `POST /sales-orders/:id/confirm`,
+`POST /sales-orders/:id/cancel` — see `docs/api.md` "Sales".
+**Migration:** 0009 applied and verified against the local PostgreSQL
+database; `001-rbac-baseline.sql` re-run to grant the 2 new permission
+codes to `SUPER_ADMIN`.
+**Tests:** No new unit tests (consistent with this project's established
+pattern of verifying DB-heavy services live). Existing suites still
+pass: `apps/api` 15/15, `apps/web` 6/6 (after retargeting the stale
+placeholder test). Both `npm run build` and `npm run lint` clean on both
+apps.
+**Risk:** Low. Additive module following the exact
+service/controller/DTO/module + `@RequirePermissions` + `@AuditLog`
+pattern proven correct across every prior module this session. The one
+genuinely new piece of logic — the credit-exposure SQL sum — was tested
+against both a passing and a failing case, not just the happy path.
+**Status:** Implemented and verified live against a real running server
+and database:
+- Reused the existing test admin session; found one seeded customer
+  (`CUST-001`, credit limit ₹150,000.50).
+- Created SO1, added a 100-unit line item at ₹900 (₹90,000 total),
+  confirmed `totalAmount` was correctly recomputed server-side, then
+  confirmed the order successfully — under the limit.
+- Created SO2 against the same customer, added an identical ₹90,000
+  line item (combined exposure ₹180,000 > ₹150,000.50 limit), and
+  confirmed `POST /:id/confirm` correctly 409'd with the exact message
+  `"...would bring customer CUST-001's exposure to 180000.00, exceeding
+  their credit limit of 150000.50"`.
+- Verified `cancel()` on SO2, then confirmed adding a further item to
+  the now-`CANCELLED` order correctly 409'd, and confirming a freshly
+  created order with zero line items correctly 400'd.
+- Confirmed `audit_events` rows for every action, with `status: FAILED`
+  on both rejected attempts and `status: COMPLETED` on every successful
+  one.
+- Live in the browser: logged in, navigated to `/sales`, confirmed all
+  three curl-created orders render with the correct order number,
+  customer code, status badge, and total; opened the `CONFIRMED` order
+  and confirmed its line item resolves with the correct product SKU,
+  quantity, price, and line total, and that only a "Cancel Order"
+  control is shown (no add-item/confirm controls) for a non-DRAFT order.
+  Zero console errors throughout.
+- Not yet done: `quotations`, `invoices`, price list lookup, a
+  credit-limit-breach approval override, Dispatch, Export, and
+  everything in Phase 5+ (Maintenance, Workforce, Finance, AI, Memory)
+  — see `docs/roadmap.md`. The legacy Go system's hardcoded credentials
+  also remain unfixed — see "Known Bugs" in `docs/project-state.md`.
+
+## 2026-09-30 — v0.2.6 — Phase 4: Dispatch (dispatch records + a found-and-fixed constraint bug)
+
+**Module:** Backend / Frontend / Dispatch
+**Change:** Implemented the Dispatch domain's core: a `dispatches` row
+per sales order tracking the physical outbound movement (vehicle,
+driver, status), reusing Phase 2's Gate & Weighment `vehicles`/`drivers`
+tables directly rather than duplicating them. A dispatch can only be
+created against a sales order whose status is `CONFIRMED` (mirrors
+Packing's RELEASED-batch gate). Status lifecycle:
+`PENDING → DISPATCHED → DELIVERED`, cancellable from `PENDING` or
+`DISPATCHED` (a recall before delivery is a legitimate case, so
+`DISPATCHED` isn't locked). Delivery confirmation is folded into
+`deliveredAt`/`deliveryNotes` on the same row rather than a separate
+`delivery_confirmations` table.
+
+**Found and fixed a real bug mid-implementation, via live testing, not
+code review**: the first version enforced "one dispatch per order" with
+a hard `UNIQUE(sales_order_id)` database constraint. Live-testing the
+full lifecycle (create → dispatch → cancel) showed the cancelled row
+permanently blocking any future dispatch of that same order — cancel-
+and-redispatch is completely normal and this broke it. Fixed by
+dropping the column-level unique constraint (migration
+`0011_foamy_husk.sql`) and moving "at most one **active** (non-
+CANCELLED) dispatch per order" to a service-level `WHERE status !=
+'CANCELLED'` check, backed by a plain index instead of a uniqueness
+guarantee. Re-verified live both directions: a fresh dispatch for an
+order whose prior one was cancelled now correctly succeeds (201), and
+attempting a second dispatch while one is still active still correctly
+409s.
+**Reason:** Continuing "implement all modules," the user asked directly
+for Dispatch next (along with Export/Maintenance/etc., which are noted
+as the honest remainder below rather than attempted shallowly in the
+same pass — Finance specifically needs the IGO ERP integration protocol
+discovered first per `docs/roadmap.md` Phase 5, and AI/Memory need their
+own Phase 6 design passes, so building stub screens for those now would
+be fake UI, the same reasoning applied throughout this session).
+**Developer/Agent:** Claude (interactive session), approved by user.
+**Affected Files:**
+- `apps/api/src/db/schema/dispatch.schema.ts` (new — `dispatches`)
+- `apps/api/src/db/schema/enums.ts` (`dispatchStatusEnum`)
+- `apps/api/src/db/schema/index.ts` (barrel export)
+- `apps/api/src/modules/dispatch/{dispatch.service.ts,dispatch.controller.ts,dispatch.module.ts,dto/create-dispatch.dto.ts,dto/deliver-dispatch.dto.ts}` (new)
+- `apps/api/src/app.module.ts` (imports `DispatchModule`)
+- `database/seeds/001-rbac-baseline.sql` (`dispatch.record.write`)
+- `apps/web/src/pages/DispatchPage.tsx` (new — custom page, same reasoning as `ProductionPage.tsx`/`PackingPage.tsx`/`SalesPage.tsx`)
+- `apps/web/src/app/routes.tsx` (`dispatch` wired to `DispatchPage`)
+- `apps/web/src/app/routes.spec.tsx` (retargeted placeholder test from `/dispatch` to `/export`, since `/dispatch` is real now)
+- `docs/api.md`, `docs/permissions.md`, `docs/database-schema.md`, `docs/architecture.md`, `docs/roadmap.md`, `docs/project-state.md` (updated for real)
+**Database Changes:** `0010_redundant_molecule_man.sql` (auto-generated
+name, kept as-is per established precedent) — creates `dispatch_status`
+enum and `dispatches` with its original (later-fixed) unique constraint.
+`0011_foamy_husk.sql` — drops that constraint, adds a plain
+`dispatches_sales_order_idx` index instead, applied same-session after
+the bug was caught.
+**API Changes:** New `GET/POST /dispatches`, `GET /dispatches/:id`,
+`POST /dispatches/:id/dispatch`, `POST /dispatches/:id/deliver`,
+`POST /dispatches/:id/cancel` — see `docs/api.md` "Dispatch".
+**Migration:** 0010 and 0011 both applied and verified against the local
+PostgreSQL database; `001-rbac-baseline.sql` re-run to grant the new
+permission code to `SUPER_ADMIN`.
+**Tests:** No new unit tests (consistent with this project's established
+pattern of verifying DB-heavy services live). Existing suites still
+pass: `apps/api` 15/15, `apps/web` 6/6 (after retargeting the stale
+placeholder test). Both `npm run build` and `npm run lint` clean on both
+apps.
+**Risk:** Low-medium. The constraint bug was a real correctness issue
+that would have blocked a normal operational flow in production — caught
+and fixed within the same implementation pass because of the verify-live
+discipline, not shipped and discovered later.
+**Status:** Implemented and verified live against a real running server
+and database:
+- Confirmed the CONFIRMED-order-only gate: dispatch creation against a
+  DRAFT sales order correctly 409'd; against a CONFIRMED order it
+  correctly created a PENDING dispatch.
+- Confirmed the duplicate-active-dispatch guard: a second dispatch
+  attempt against an order that already had one correctly 409'd.
+- Confirmed the full status machine: deliver-before-dispatch correctly
+  409'd; dispatch (PENDING→DISPATCHED) succeeded; a second sales
+  order's dispatch went cleanly through the full PENDING→DISPATCHED→
+  DELIVERED happy path with delivery notes recorded.
+- Found the constraint bug live: cancelling the first dispatch and then
+  trying to create a new one for the same order incorrectly 409'd
+  ("already has a dispatch record"). Fixed and re-verified: the same
+  sequence now correctly succeeds, and the still-active-dispatch guard
+  was re-checked to confirm it wasn't accidentally weakened by the fix.
+- Confirmed `audit_events` rows for every action, `status: FAILED` on
+  every rejected attempt and `status: COMPLETED` on every successful
+  one, across both the buggy and fixed versions.
+- Live in the browser: navigated to `/dispatch` (session persisted from
+  the prior turn), confirmed both curl-created dispatch records render
+  correctly — the CANCELLED one with resolved vehicle/driver, the
+  DELIVERED one with its delivery notes. Zero console errors.
+- Not yet done: `shipments`/`delivery_confirmations` as separate tables,
+  `gate_entries.direction = OUTBOUND` integration, Export, and
+  everything in Phase 5+ (Maintenance, Workforce, Finance, AI, Memory)
+  — see `docs/roadmap.md`. The legacy Go system's hardcoded credentials
+  also remain unfixed — see "Known Bugs" in `docs/project-state.md`.
+
+## 2026-10-05 — v0.3.0 — Remaining modules (Export → Settings) and front-end redesign
+
+**Module:** Backend / Frontend / Export, Maintenance, Workforce, Finance, Memory, AI, Reports, Audit & Activity, Identity (users/roles), all screens
+**Change:** Built every module that was still a placeholder, so all 20
+navigation entries now have a real API and screen: **Export** (customer →
+proforma → commercial invoice → container → milestones), **Maintenance**
+(breakdowns suspend machines; plans, work orders, spare parts, machine
+history), **Workforce** (shifts, attendance, labour allocation),
+**Finance** (cost centres, expenses with segregation of duties, payments,
+receivables/payables, material-only batch costing), **Memory** (typed,
+versioned, sensitivity-filtered), **AI Agents** (A01–A12 registry; 8
+rule-based analyzers that only propose findings), **Reports** (overview,
+yield, sales by customer, batch traceability), **Audit & Activity**
+(filterable view over the audit log) and **Settings** (profile, change
+password, users, roles, permission catalog). Redesigned the whole front
+end (ADR-010): Geist/Geist Mono and Phosphor icons, warm neutrals with one
+accent, grouped navigation, KPI-strip dashboard, skeleton/empty/error
+states, sentence case, 404 page, collapsible mobile menu, route-level code
+splitting (main bundle 547 kB → 425 kB), and a brand favicon replacing the
+stock Vite bolt.
+**Reason:** User asked to "start pending all module and redesign all, make
+perfectly." Previous turns scoped "all modules" down because Finance, AI and
+Memory need decisions that don't exist yet. This turn made those decisions
+explicit rather than skipping them: Finance is operational-only because the
+IGO ERP protocol is unknown (ADR-009); AI is rule-based because no LLM is
+chosen (ADR-008). Both are stated on the screens themselves.
+**Developer/Agent:** Claude (interactive session), approved by user.
+**Affected Files:**
+- `apps/api/src/db/schema/{export,maintenance,workforce,finance,memory,ai}.schema.ts` (new) and `enums.ts`, `index.ts`
+- `apps/api/src/modules/{export,maintenance,workforce,finance,memory,ai,reports,activity}/**` (new)
+- `apps/api/src/modules/identity/{users.service.ts,users.controller.ts,dto/change-password.dto.ts,dto/assign-role.dto.ts}` (new), `auth.service.ts`, `auth.controller.ts`, `identity.module.ts`
+- `apps/api/src/app.module.ts`
+- `database/migrations/0012_dark_sabretooth.sql`, `database/seeds/001-rbac-baseline.sql` (+21 permission codes), `database/seeds/002-ai-agents.sql` (new)
+- `apps/web/src/index.css`, `public/favicon.svg`, `app/{navigation.ts,routes.tsx,RequireAuth.tsx,routes.spec.tsx}`
+- `apps/web/src/components/{AppShell,Badge,Tabs,ResourceListPage,ui,ActionButton}.*` (new/rewritten); `StatCard` and `PlaceholderPage` removed (unused)
+- `apps/web/src/lib/{format.ts,useLookup.ts,auth.ts,api.ts}`
+- `apps/web/src/pages/{Export,Maintenance,Workforce,Finance,Reports,AiAgents,AuditActivity,Memory,Settings,NotFound}*` (new), `Dashboard.*`, `Login.*` (rewritten); existing pages adopt the new header/variants
+- `apps/web/package.json` (+`@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `@phosphor-icons/react`)
+- `docs/{api,permissions,database-schema,architecture,roadmap,decisions,project-state}.md`
+**Database Changes:** `0012_dark_sabretooth.sql` — 20 tables (Export 6,
+Maintenance 4, Workforce 3, Finance 3, Memory 1, AI 3) and their enums.
+64 public tables total.
+**API Changes:** New endpoints for every module above; `POST
+/auth/change-password`, `GET /users|/roles|/permissions`, `POST|DELETE
+/users/:id/roles`, `POST /users/:id/status`. See `docs/api.md`.
+**Migration:** 0012 applied; both seed files re-run (55 permissions; 12 agents).
+**Tests:** `apps/api` 15/15 (unchanged). `apps/web` 9/9 (was 6): rewrote the
+Dashboard tests for the new dashboard and the route tests for the 404 page /
+no-placeholder invariant. Build and lint clean on both apps (lint shows only
+the existing `set-state-in-effect` warning pattern, no errors).
+**Risk:** Medium — the largest single change set so far, and it touched shared
+components every page depends on. Mitigated by keeping the old class names
+that hand-built pages import, and by exercising the UI end to end.
+**Status:** Implemented and verified live.
+- **API, 133 live checks** (curl against the running server and database),
+  covering the happy path and the failure paths of every new module: 132
+  passed first time; the one miss was my own wrong assertion (`3000.0` vs
+  JSON `3000`). A rerun passed all but three checks that assume yesterday's
+  data doesn't exist (attendance hours doubled by the earlier run; the sales
+  order was already fully paid, so the payment cap correctly returned 409
+  "outstanding 0.00") — environment state, not defects.
+- **Rules proved**, not just written: proforma can't be converted twice;
+  milestones can't go backwards or continue after `DELIVERED`; breakdown →
+  machine `SUSPENDED` → resolved → `ACTIVE`; completing a preventive order
+  moves the plan's next due date exactly +30 days; spare parts can't go
+  below zero; attendance is unique per day; labour needs attendance and
+  respects the 12h/6h caps; the submitter gets 403 approving their own
+  expense (and it lands in the audit log as a `SECURITY` event); a payment
+  can't exceed the outstanding balance; confidential memory is hidden from a
+  restricted user (404, not 403) and visible to a permitted one; a revision
+  creates v2 and supersedes v1; re-running an agent doesn't duplicate
+  pending findings; unimplemented agents refuse to run; the audit log
+  rejects a user without `audit.event.read`.
+- **Browser (real clicks):** created a proforma, added a line item (the
+  parent row's total refreshed to 1,250.00), issued it (actions changed,
+  items locked), converted it, and saw the new commercial invoice with its
+  "Mark paid" action; revised a memory item and viewed its version history;
+  tried a wrong current password (inline error, session kept); attempted to
+  approve my own expense (segregation-of-duties message shown beside the
+  button); logged out and back in; checked the 404 page, dark mode, and a
+  375px phone layout.
+- **Bugs found and fixed this turn**, each by looking at the running app
+  or the live API rather than by review:
+  1. `npm run build` run while `nest start --watch` was live wiped `dist/`
+     and crashed the dev server (process error, not a code bug; don't do it).
+  2. `PermissionsGuard` ignores class-level `@RequirePermissions`, which
+     would have left the audit log readable by any signed-in user. Moved the
+     decorator onto each handler and verified a no-role user gets 403.
+  3. A wrong current password returned **401**, and the web client logs the
+     user out on any 401. Changed to **400**.
+  4. The login profile cached in `localStorage` never refreshed, so newly
+     granted permissions (e.g. Memory's Revise/Archive) were invisible until
+     re-login. `RequireAuth` now re-reads `/auth/me` once per page load (and
+     so also detects a dead token up front).
+  5. Title Case from `text-transform: capitalize` ("Parts At Reorder
+     Level") replaced with sentence case.
+  6. Self-approval error text was clipped by an inherited `nowrap`; fixed.
+  7. The audit log showed raw user ids and `POST /path` as the "operation";
+     it now resolves names (when permitted) and hides route-derived text.
+  8. Mobile: the stacked sidebar took a quarter of the screen; now collapses
+     behind a menu button.
+- **Not done / honest limits:** no LLM (4 of 12 agents can't run); Finance
+  has no ledger, tax or IGO ERP sync, and batch cost excludes labour,
+  machine and overhead; export documents lack HS codes, bill of lading,
+  customs and FX; a batch can't be traced forward to a customer; Memory has
+  no embeddings or conflict records; `POST /auth/register` is still open;
+  the legacy Go system's hardcoded secrets are still unfixed; there is no
+  committed integration test suite. All listed in `docs/project-state.md`.
+
+## 2026-10-05 — v0.3.1 — Security hardening, integration tests, traceability to the customer
+
+**Module:** Security / Identity / Dispatch / Reports / CI / Legacy Go system
+**Change:** Fixed the open security issues, then audited the rest.
+**Security:** (1) removed five hardcoded credentials from the legacy system
+(Docker Hub password in `plugin.sh`, MQTT password in `docker-compose.yml` and
+both Kubernetes manifests, Ethereum private key in `server/blockchain.go`) in
+favour of environment variables / a Kubernetes Secret; (2) closed
+`POST /auth/register` (first-run bootstrap only, atomic) and added admin-only
+`POST /users` plus an Add user form; (3) accounts with no roles get nothing but
+their own profile; `finance.read` added for money views; (4) deactivated users
+lose all sessions immediately and cannot log in; (5) per-IP rate limiting,
+`helmet` headers, CORS scoped to configured origins, password length bounds,
+constant-time login for unknown users; (6) `PermissionsGuard` now reads
+class-level as well as handler-level permissions; (7) confidential memory is no
+longer copied into the audit log; (8) production dependencies brought to 0
+known vulnerabilities (NestJS 10→11, drizzle-orm 0.36→0.45).
+**Other:** `dispatch_lots` links packed lots to dispatches, so a batch traces
+forward to its customer and an order traces back to every supplier (recall
+view); Dispatch rebuilt on the shared list component with a lot-linking panel;
+Reports gains customer columns and a "Customer recall" tab; a committed
+**integration test suite (43 tests)** against a disposable real database; CI
+workflow for the Node apps; secret scanner; web lint at zero warnings; docs
+(`security.md`, `environment.md`, `testing.md` were stubs or stale).
+**Reason:** User asked to "fix the security issues first and check all issues and
+fix." The previous turn listed the open ones; this works through them in
+priority order and then looks for more rather than stopping at the known list.
+**Developer/Agent:** Claude (interactive session), approved by user.
+**Affected Files:**
+- Legacy: `plugin.sh`, `docker-compose.yml`, `kube-config/{core-system,grading-plugin}.yaml`, `server/blockchain.go`, `.env.example` (new), `.gitignore`, `.github/workflows/ci-cd.yml`
+- New tooling: `scripts/check-secrets.sh`, `.githooks/pre-commit`, `.github/workflows/node-ci.yml`
+- API: `src/app.setup.ts` (new), `main.ts`, `app.module.ts`, `db/drizzle.module.ts`; `modules/identity/{auth.service,auth.controller,users.service,users.controller,identity.module}.ts`, `dto/{register-user,create-user,change-password,login,assign-role}.dto.ts`, `guards/permissions.guard.{ts,spec.ts}`; `modules/memory/memory.controller.ts`, `modules/finance/finance.controller.ts`; `modules/dispatch/**`, `modules/reports/**`; `db/schema/dispatch.schema.ts`; `database/migrations/0013_puzzling_ultimo.sql`; `database/seeds/001-rbac-baseline.sql` (+`finance.read`)
+- API tests (new): `test/e2e/{jest-e2e.config.js,env.ts,provision.ts,global-setup.ts,helpers.ts,security,bootstrap,throttle,rules,traceability}.e2e-spec.ts`
+- API deps: `@nestjs/{common,core,platform-express,testing}` 11, `@nestjs/config` 4, `drizzle-orm` 0.45.3, `drizzle-kit` 0.31, `+@nestjs/throttler`, `+helmet`, `+@types/supertest`
+- Web: `pages/{DispatchPage,ReportsPage,SettingsPage}.tsx`, `pages/Dispatch.module.css`, `app/{routes.tsx,lazyPages.ts}`, five older pages (lint), `components/ResourceListPage.module.css`
+- Docs: `security.md`, `environment.md`, `testing.md`, `api.md`, `permissions.md`, `database-schema.md`, `architecture.md`, `roadmap.md`, `project-state.md`
+**Database Changes:** `0013` — `dispatch_lots` (65 public tables). The dev database
+also had its throwaway accounts deactivated and de-privileged (passwords made
+unusable, roles removed, sessions revoked).
+**API Changes:** new `POST /users`, `GET|POST|DELETE /dispatches/:id/lots`,
+`GET /dispatches/:id/available-lots`, `GET /reports/traceability/sales-order/:id`;
+`/auth/register` is now bootstrap-only; forward trace now reaches customers.
+**Migration:** 0013 applied; seeds re-run.
+**Tests:** API unit 18/18 (was 15), **API integration 43/43 (new)**, web 9/9;
+typecheck and lint clean on both apps; web lint has no warnings.
+**Risk:** Medium-high — it changes authentication/authorisation and upgrades the
+framework. Mitigated by the integration suite, which was run after every
+dependency step, and by mutation checks (below).
+**Status:** Implemented and verified.
+- **Mutation checks:** re-introduced three vulnerabilities one at a time (role-less
+  access allowed; confidential content unredacted in the audit log; deactivated
+  users able to log in). Each made exactly its own test fail; code restored; suite green.
+- **Live against the dev server:** no `X-Powered-By`; HSTS/CSP/nosniff present; CORS
+  header only for `http://localhost:5173`; register → 403; a role-less account gets
+  200 on `/auth/me` and 403 on customers/finance/memory; 12 rapid bad logins → nine
+  401s then 429s.
+- **In the browser:** linked a packed lot to a pending dispatch through the new
+  panel (picker then excluded it); the Customer recall tab traced order
+  `SO-…07196F` → CUST-001 → supplier SUP-RM-01 → lot → batch → PO → receipt;
+  created a user through Settings and confirmed it is least-privilege (production
+  data readable; finance, audit log and user admin all 403).
+- **Bugs found by the new tests/checks and fixed:** (a) forward-trace `LEFT JOIN`
+  returned an extra empty row for a lot cancelled off one dispatch and re-shipped
+  (caught by the traceability test); (b) drizzle 0.45 wraps driver errors, so
+  two DB-trigger assertions had to read `error.cause` (no application code
+  depended on the old shape); (c) the compose change would have broken the legacy
+  CI image build (variables are required even for `build`) — placeholders added;
+  (d) I again ran `npm run build` against a live `nest --watch` and crashed the
+  dev server.
+- **Tried and rejected:** NestJS 12 (ESM-only; this codebase is CommonJS — a large
+  migration for no security gain); `@nestjs/schematics` 12 (needs TypeScript 6).
+- **Not done / needs a human:** **rotate the leaked credentials** — they are still in
+  git history (see `docs/security.md`); purging history is destructive and was not
+  done; 47 dev-tooling advisories remain (not shipped); the Go service could not be
+  built here (generated protobuf files are not in the repo) — only the changed file
+  was syntax-checked and the scanner/compose/Kubernetes files validated; the
+  documented residual risks (token in `localStorage`, in-memory limiter, no MFA).
+
 ---
 
 <!-- Add new entries above this line, most recent first. -->

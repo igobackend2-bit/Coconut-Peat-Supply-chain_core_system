@@ -1,0 +1,25 @@
+.title {
+  margin: 0 0 10px;
+}
+
+.warn {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 13px;
+  max-width: 78ch;
+}
+
+.adder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.adder select {
+  min-width: 240px;
+}

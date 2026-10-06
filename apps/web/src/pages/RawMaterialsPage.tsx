@@ -3,6 +3,7 @@ import { ResourceListPage } from '../components/ResourceListPage';
 export function RawMaterialsPage() {
   return (
     <ResourceListPage
+      variant="page"
       title="Raw Material Lots"
       description="Created from a Goods Receipt (see Procurement) — product and supplier are derived from the receipt's Purchase Order, not entered here."
       listPath="/raw-material-lots"

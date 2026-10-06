@@ -1,3 +1,6 @@
+# MQTT credentials are read from the Secret `mqtt-credentials` — never commit them. Create it once per cluster:
+#   kubectl create secret generic mqtt-credentials \
+#     --from-literal=broker='ssl://<host>:8883' --from-literal=username='<user>' --from-literal=password='<password>'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,13 +23,16 @@ spec:
             - containerPort: 50051
           env:
             - name: MQTT_BROKER
-              value: "ssl://34f3f472652e44989715e359655e32dc.s1.eu.hivemq.cloud:8883"
+              valueFrom:
+                secretKeyRef: { name: mqtt-credentials, key: broker }
             - name: CLIENT_ID
               value: "CoreClient"
             - name: MQTT_USERNAME
-              value: "harith"
+              valueFrom:
+                secretKeyRef: { name: mqtt-credentials, key: username }
             - name: MQTT_PASSWORD
-              value: "Harith123"
+              valueFrom:
+                secretKeyRef: { name: mqtt-credentials, key: password }
           resources:
             requests:
               cpu: "100m"

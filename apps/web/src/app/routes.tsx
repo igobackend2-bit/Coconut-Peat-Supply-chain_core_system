@@ -2,27 +2,14 @@ import type { ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { AppShell } from '../components/AppShell';
 import { Dashboard } from '../pages/Dashboard';
-import { GateWeighmentPage } from '../pages/GateWeighmentPage';
-import { InventoryPage } from '../pages/InventoryPage';
 import { Login } from '../pages/Login';
-import { MasterDataPage } from '../pages/MasterDataPage';
-import { PlaceholderPage } from '../pages/PlaceholderPage';
-import { ProcurementPage } from '../pages/ProcurementPage';
-import { ProductionPage } from '../pages/ProductionPage';
-import { QualityPage } from '../pages/QualityPage';
-import { RawMaterialsPage } from '../pages/RawMaterialsPage';
+import { NotFound } from '../pages/NotFound';
+import { AiAgentsPage, AuditActivityPage, DispatchPage, ExportPage, FinancePage, GateWeighmentPage, InventoryPage, MaintenancePage, MasterDataPage, MemoryPage, PackingPage, ProcurementPage, ProductionPage, QualityPage, RawMaterialsPage, ReportsPage, SalesPage, SettingsPage, WorkforcePage } from './lazyPages';
 import { navigationItems } from './navigation';
 import { RequireAuth } from './RequireAuth';
 
-/**
- * Real pages for every module with a working backend (see
- * docs/roadmap.md for what's built). Everything else still renders
- * PlaceholderPage — there's no API for Inventory, Packing, Sales,
- * Dispatch, Export, Maintenance, Workforce, Finance, Reports, AI Agents,
- * Audit & Activity, or Memory yet, so building screens for them would
- * just be fake UI with nothing behind it.
- */
-const REAL_PAGES: Record<string, ReactElement> = {
+/** Screen for every navigation entry except the dashboard (the index route). Exported so a test can assert none is missing. */
+export const pages: Record<string, ReactElement> = {
   'master-data': <MasterDataPage />,
   procurement: <ProcurementPage />,
   'gate-weighment': <GateWeighmentPage />,
@@ -30,6 +17,18 @@ const REAL_PAGES: Record<string, ReactElement> = {
   production: <ProductionPage />,
   quality: <QualityPage />,
   inventory: <InventoryPage />,
+  packing: <PackingPage />,
+  sales: <SalesPage />,
+  dispatch: <DispatchPage />,
+  export: <ExportPage />,
+  maintenance: <MaintenancePage />,
+  workforce: <WorkforcePage />,
+  finance: <FinancePage />,
+  reports: <ReportsPage />,
+  'ai-agents': <AiAgentsPage />,
+  'audit-activity': <AuditActivityPage />,
+  memory: <MemoryPage />,
+  settings: <SettingsPage />,
 };
 
 export const routes: RouteObject[] = [
@@ -46,8 +45,9 @@ export const routes: RouteObject[] = [
             .filter((item) => item.path !== '')
             .map((item) => ({
               path: item.path,
-              element: REAL_PAGES[item.path] ?? <PlaceholderPage title={item.label} />,
+              element: pages[item.path] ?? <NotFound />,
             })),
+          { path: '*', element: <NotFound /> },
         ],
       },
     ],

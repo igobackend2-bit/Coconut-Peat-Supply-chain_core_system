@@ -57,6 +57,48 @@
       "when": 1790745129127,
       "tag": "0007_add_raw_material_receipt_movement_type",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790766787097,
+      "tag": "0008_naive_morlocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790774621614,
+      "tag": "0009_strange_devos",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790775237191,
+      "tag": "0010_redundant_molecule_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790775396643,
+      "tag": "0011_foamy_husk",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791188227912,
+      "tag": "0012_dark_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791201225168,
+      "tag": "0013_puzzling_ultimo",
+      "breakpoints": true
     }
   ]
 }

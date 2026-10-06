@@ -61,6 +61,33 @@ Seeded by `database/seeds/001-rbac-baseline.sql`:
 | `master_data.qc_parameter.write` | MASTER_DATA | Create QC parameters. Enforced. |
 | `master_data.unit.write` | MASTER_DATA | Create units of measure. Enforced. |
 | `master_data.vendor.write` | MASTER_DATA | Create/update vendors (service providers — distinct from raw-material suppliers). Enforced. |
+| `packing.order.write` | PACKING | Create packing orders; mark them complete. Enforced. |
+| `packing.lot.write` | PACKING | Record packing lots against a packing order. Enforced. |
+| `sales.order.write` | SALES | Create sales orders, add line items, cancel orders. Enforced. |
+| `sales.order.confirm` | SALES | Confirm a draft sales order (runs the customer credit-limit check). Enforced. |
+| `dispatch.record.write` | DISPATCH | Create dispatches against a confirmed sales order; mark them dispatched/delivered/cancelled. Enforced. |
+| `export.customer.write` | EXPORT | Create export customers. Enforced. |
+| `export.invoice.write` | EXPORT | Create/issue/cancel proformas, add items, convert to commercial invoices, mark paid. Enforced. |
+| `export.container.write` | EXPORT | Book containers, record milestones. Enforced. |
+| `maintenance.plan.write` | MAINTENANCE | Create maintenance plans. Enforced. |
+| `maintenance.breakdown.write` | MAINTENANCE | Report, progress and resolve breakdowns. Enforced. |
+| `maintenance.work_order.write` | MAINTENANCE | Create work orders, generate from plans, start/complete/cancel. Enforced. |
+| `maintenance.spare_part.write` | MAINTENANCE | Create spare parts, adjust stock. Enforced. |
+| `workforce.shift.write` | WORKFORCE | Create shifts. Enforced. |
+| `workforce.attendance.write` | WORKFORCE | Record attendance. Enforced. |
+| `workforce.allocation.write` | WORKFORCE | Allocate labour hours. Enforced. |
+| `finance.read` | FINANCE | View expenses, payments, cost centres, receivables, payables, batch costs. Enforced on every finance GET. |
+| `finance.cost_centre.write` | FINANCE | Create cost centres. Enforced. |
+| `finance.expense.write` | FINANCE | Submit expenses. Enforced. |
+| `finance.expense.approve` | FINANCE | Approve/reject expenses — **never your own** (segregation of duties, checked in the service in addition to this permission). Enforced. |
+| `finance.payment.write` | FINANCE | Record incoming/outgoing payments. Enforced. |
+| `memory.item.write` | MEMORY | Create, revise, archive memory. Enforced. |
+| `memory.confidential.read` | MEMORY | See `CONFIDENTIAL` memory items (filtered from lists/history otherwise). Enforced. |
+| `ai.agent.run` | AI | Run an analyzer. Enforced. |
+| `ai.finding.decide` | AI | Acknowledge/dismiss findings. Enforced. |
+| `audit.event.read` | AUDIT | Read the audit log. Enforced (handler-level on every route). |
+| `identity.user.read` | IDENTITY | List users, roles, permissions. Enforced. |
+| `identity.user.manage` | IDENTITY | Assign/remove roles, activate/deactivate users. Enforced. |
 | `gate_weighment.vehicle.write` | GATE_WEIGHMENT | Register vehicles. Enforced. |
 | `gate_weighment.driver.write` | GATE_WEIGHMENT | Register drivers. Enforced. |
 | `gate_weighment.gate_entry.write` | GATE_WEIGHMENT | Create gate entries. Enforced. |

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
+	"strings"
 
 	tracking "github.com/harith2001/Coconut-Peat-Supply-chain_core_system/config/Tracking"
 
@@ -60,10 +62,16 @@ func blockchainMain(PluginName string, WorkflowId string) {
 }
 
 func createShipment(client *ethclient.Client, instance *tracking.Tracking, PluginName string, WorkflowId string) {
-	// Replace with the private key of the sender
-	privateKey, err := crypto.HexToECDSA("12022630c9d2eb7d4335a831f6268d78f9b4192e978e54d57d0e0401eff8b165") // Replace with a real Hardhat test account private key
+	// The sender's key is read from the environment — it must never be
+	// committed. Use a dedicated, funded-only-as-needed account.
+	rawKey := strings.TrimPrefix(strings.TrimSpace(os.Getenv("BLOCKCHAIN_PRIVATE_KEY")), "0x")
+	if rawKey == "" {
+		log.Fatal("BLOCKCHAIN_PRIVATE_KEY is not set (hex private key of the sender account)")
+	}
+	privateKey, err := crypto.HexToECDSA(rawKey)
 	if err != nil {
-		log.Fatal("Invalid private key:", err)
+		// Do not include the key (or the library's echo of it) in the log line.
+		log.Fatal("BLOCKCHAIN_PRIVATE_KEY is not a valid hex private key")
 	}
 
 	// Derive sender's public key

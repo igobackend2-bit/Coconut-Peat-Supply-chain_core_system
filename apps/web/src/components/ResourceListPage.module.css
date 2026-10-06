@@ -1,53 +1,114 @@
+/*
+ * Class names `header`, `description`, `newButton`, `form`, `formField`,
+ * `formError` and `table` are shared with the hand-built workflow pages
+ * (Production, Sales, Dispatch…) — keep them, so one restyle covers all.
+ */
+
 .header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
   margin-bottom: 16px;
+  min-height: 34px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .description {
   color: var(--text-muted);
-  margin: 4px 0 0;
+  margin: 0;
+  max-width: 64ch;
 }
 
 .newButton {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  cursor: pointer;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+.newButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.nested {
+  padding: 4px 0;
+}
+
+.nestedTitle {
+  margin: 0 0 4px;
 }
 
 .form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  padding: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px 16px;
+  padding: 18px 20px;
   margin-bottom: 20px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  animation: slideDown 0.2s ease-out both;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .formField {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--text-muted);
 }
 
+.wide {
+  grid-column: 1 / -1;
+}
+
+.req {
+  color: var(--danger);
+}
+
+.hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .formField input,
-.formField select {
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
+.formField select,
+.formField textarea {
+  font-weight: 400;
 }
 
 .formError {
@@ -56,33 +117,103 @@
   margin: 0;
 }
 
+.form > button[type='submit'],
 .form button[type='submit'] {
   grid-column: 1 / -1;
   justify-self: start;
-  padding: 8px 20px;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  cursor: pointer;
+  padding: 9px 22px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .table th,
 .table td {
   text-align: left;
-  padding: 8px 12px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .table th {
-  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  color: var(--text-faint);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.table tbody tr:hover {
+  background: color-mix(in srgb, var(--neutral-soft) 55%, transparent);
+}
+
+.right {
+  text-align: right !important;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.actionRow {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.caret {
+  transition: transform 0.15s ease;
+}
+
+.caretOpen {
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.rowOpen {
+  background: var(--accent-soft);
+}
+
+.detailRow:hover {
+  background: transparent !important;
+}
+
+.detailRow > td {
+  padding: 0 !important;
+  background: var(--surface-sunken);
+}
+
+.detail {
+  padding: 16px 20px 20px;
+  box-shadow: inset 0 2px 6px -4px rgba(58, 44, 18, 0.25);
 }

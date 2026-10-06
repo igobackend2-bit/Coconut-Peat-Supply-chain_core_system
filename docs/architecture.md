@@ -12,7 +12,7 @@ target shape, those two are the moving trackers.
 Users / Operators / Managers / AI Agents
                  |
                  v
-   apps/web — Vite + React SPA ✅ (skeleton; real screens 🚧)
+   apps/web — Vite + React SPA ✅ (a real screen for every module)
                  |
                  v (HTTP, CORS)
    apps/api — NestJS ✅
@@ -226,77 +226,96 @@ against a specific batch.
 -   pallets — ⬜ deferred
 -   packaging_inventory — ⬜ deferred
 
-### Packing — ⬜ Not started (Phase 4)
+### Packing — 🚧 Core implemented (Phase 4)
 
 Also not in the original domain list; required by
 `product-requirements.md` §4.9.
 
--   packing_orders
--   packing_lots (batch number, manufacturing date, QC status, links to
-    a production_batch and to pallets/containers)
+-   packing_orders — ✅ (`GET/POST /packing-orders`) — can only be
+    created against a `RELEASED` production batch (enforced server-side,
+    409 otherwise); status `PENDING → IN_PROGRESS → COMPLETED`
+-   packing_lots — ✅ (`GET/POST /packing-orders/:id/lots`) — batch
+    number (server-generated `lot_number`), QC status field present.
+    **Deferred**: real QR code generation (the lot number is the
+    traceable identifier for now), links to pallets/containers
+    (Inventory's `pallets`, itself deferred)
 
-### Sales/Logistics — ⬜ Not started (Phase 4)
+### Sales — 🚧 Core implemented (Phase 4)
 
--   quotations
--   sales_orders
--   invoices
--   dispatches
--   vehicles
--   shipments
--   delivery_confirmations
+-   quotations — ⬜ deferred (a pre-commitment draft, not on the
+    critical path for validating an order against credit limit)
+-   sales_orders — ✅ (`GET/POST /sales-orders`, `POST .../items`,
+    `POST .../confirm`, `POST .../cancel`) — `DRAFT` orders build up
+    freely; credit-limit exposure is checked only at `confirm()` against
+    `customers.credit_limit`, a hard 409 (no approval-override path yet,
+    unlike Procurement's PO-threshold `approvals` flow)
+-   invoices — ⬜ deferred (belongs once goods actually move —
+    Dispatch/Finance)
 
-### Export — ⬜ Not started (Phase 4)
+### Dispatch — 🚧 Core implemented (Phase 4)
 
-Also not in the original domain list; required by
-`product-requirements.md` §4.12. Shares `vehicles`/`shipments` shape with
-Sales/Logistics but has export-specific documentation requirements.
+Split out from the original "Sales/Logistics" domain list — dispatch is
+a distinct concern (getting goods physically out the gate) from taking
+and validating a sales order.
 
--   export_customers
--   proforma_invoices
--   commercial_invoices
--   containers
--   shipment_milestones
+-   dispatches — ✅ (`GET/POST /dispatches`, `POST .../dispatch`,
+    `POST .../deliver`, `POST .../cancel`) — can only be created against
+    a `CONFIRMED` sales order; at most one *active* (non-`CANCELLED`)
+    dispatch per order, enforced server-side (a hard DB unique
+    constraint was tried first, found wrong by live testing — it
+    permanently blocked redispatch after a cancellation — and replaced
+    with a service-level check, see `docs/database-schema.md`)
+-   vehicles — ✅ reuses Phase 2's Gate & Weighment `vehicles`/`drivers`
+    tables directly, not duplicated
+-   dispatch_lots — ✅ which packed lots ship on a dispatch; makes batch → customer
+    and customer → supplier traceability possible (`/reports/traceability/*`)
+-   shipments — ⬜ deferred, folded into `dispatches.deliveredAt`/
+    `deliveryNotes` for this MVP
+-   delivery_confirmations — ⬜ deferred, same fold-in as `shipments`
 
-### Maintenance — ⬜ Not started (Phase 5)
+### Export — 🚧 Core implemented (Phase 4)
 
--   maintenance_plans
--   breakdowns
--   work_orders
--   spare_parts
--   machine_history
+Required by `product-requirements.md` §4.12.
 
-### Workforce — ⬜ Not started (Phase 5)
+-   export_customers — ✅
+-   proforma_invoices (+ items) — ✅ `DRAFT → ISSUED → CONVERTED`
+-   commercial_invoices — ✅ only from an issued proforma
+-   containers — ✅ only against a non-cancelled invoice
+-   shipment_milestones — ✅ forward-only, append-only trail
+-   **Deferred**: HS codes, bill of lading, customs documents, FX, lot linkage
 
-Also not in the original domain list; required by
-`product-requirements.md` §4.14.
+### Maintenance — ✅ Implemented (Phase 5)
 
--   shifts
--   attendance
--   labour_allocation
+-   maintenance_plans, breakdowns, work_orders, spare_parts — ✅
+-   machine_history — ✅ computed view, not a table
+-   Wired into Master Data: a breakdown suspends the machine; resolving the
+    last open one restores it; completing a preventive order advances its plan.
 
-### Finance — ⬜ Not started (Phase 5)
+### Workforce — ✅ Implemented (Phase 5)
 
--   purchase_accounting
--   sales_accounting
--   expenses
--   payments
--   receipts
--   cost_centres
--   batch_costs
--   product_profitability
+Required by `product-requirements.md` §4.14.
 
-Per `product-requirements.md` §4.15, this integrates with the central
-IGO ERP rather than being a full standalone ledger — see §6 Integration
-Architecture.
+-   shifts, attendance, labour_allocations — ✅
+-   Rules: one attendance row per employee per day; labour only for people
+    who attended; 12h/6h daily cap.
 
-### AI — ⬜ Not started (Phase 6)
+### Finance — 🚧 Operational finance only (Phase 5, ADR-009)
 
--   ai_agents
--   ai_sessions
--   ai_messages
--   ai_tool_calls
--   ai_approvals
--   ai_executions
+-   cost_centres, expenses, payments — ✅
+-   Computed: receivables (with credit utilisation), payables, material-only
+    batch cost — ✅
+-   expenses cannot be approved by their submitter (segregation of duties)
+-   purchase_accounting / sales_accounting / receipts / product_profitability —
+    ⬜ **not built**: no general ledger, tax or GST; IGO ERP integration
+    deferred until its protocol is known
+
+### AI — 🚧 Rule-based analyzers, no LLM (Phase 6, ADR-008)
+
+-   ai_agents (A01–A12), ai_runs, ai_findings — ✅
+-   8 of 12 agents run as deterministic analyzers; findings are `PROPOSED`
+    and need a human decision; nothing here changes business data
+-   ai_sessions, ai_messages, ai_tool_calls, ai_approvals, ai_executions —
+    ⬜ need an LLM and a leveled permission model
 
 ### Governance — ✅ audit_events + approvals implemented (Phase 1–2)
 
@@ -316,14 +335,12 @@ Architecture.
     shape is needed)
 -   system_events — ⬜
 
-### Memory — ⬜ Not started (Phase 6)
+### Memory — 🚧 Core implemented (Phase 6)
 
--   memory_items
--   memory_sources
--   memory_links
--   memory_versions
--   memory_feedback
--   memory_conflicts
+-   memory_items — ✅ typed, versioned (edits supersede, never overwrite),
+    sensitivity-filtered (`CONFIDENTIAL` needs a permission), text search
+-   memory_sources, memory_links, memory_feedback, memory_conflicts,
+    embeddings, automatic candidate extraction — ⬜
 
 ## 4. Event-Driven Principle
 

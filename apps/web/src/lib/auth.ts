@@ -45,6 +45,15 @@ export function setSession(token: string, user: SessionUser): void {
   }
 }
 
+/** Replaces the cached profile (roles/permissions) without touching the token. */
+export function updateUser(user: SessionUser): void {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // ignore
+  }
+}
+
 export function clearSession(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
@@ -56,4 +65,9 @@ export function clearSession(): void {
 
 export function isAuthenticated(): boolean {
   return getToken() !== null;
+}
+
+/** UI-side convenience only (hides controls the user can't use); the API enforces permissions regardless. */
+export function hasPermission(code: string): boolean {
+  return getUser()?.permissions.includes(code) ?? false;
 }

@@ -1,3 +1,4 @@
+import { PageHeader } from '../components/ui';
 import { useEffect, useState } from 'react';
 import { apiGet, ApiError } from '../lib/api';
 import { Tabs } from '../components/Tabs';
@@ -56,7 +57,7 @@ function BalancesPanel() {
 
   return (
     <section>
-      <h1>Stock Balances</h1>
+      
       <p className={listStyles.description}>
         Computed as SUM(quantity_kg) over stock_ledger — not a separately maintained table (see the doc comment in
         inventory.schema.ts for why).
@@ -99,7 +100,7 @@ function LedgerPanel() {
 
   return (
     <section>
-      <h1>Stock Ledger</h1>
+      
       <p className={listStyles.description}>
         Append-only (database-level trigger, same pattern as audit_events) — every row here is a real, immutable stock
         movement, negative for consumption, positive for receipts/output.
@@ -140,11 +141,14 @@ function LedgerPanel() {
 
 export function InventoryPage() {
   return (
-    <Tabs
-      tabs={[
-        { label: 'Balances', content: <BalancesPanel /> },
-        { label: 'Ledger', content: <LedgerPanel /> },
-      ]}
-    />
+    <section>
+      <PageHeader title="Inventory" description="Stock is never edited directly — every balance is the sum of immutable ledger movements written by receiving, production and (later) dispatch." />
+      <Tabs
+        tabs={[
+          { label: 'Balances', content: <BalancesPanel /> },
+          { label: 'Ledger', content: <LedgerPanel /> },
+        ]}
+      />
+    </section>
   );
 }

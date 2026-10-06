@@ -1,11 +1,15 @@
 import { render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
-import { routes } from './routes';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { navigationItems } from './navigation';
+import { pages, routes } from './routes';
 
-// Dashboard fires a real fetch() on mount; stub it so route tests don't
-// depend on a running backend.
+// Pages fire real fetch() calls on mount; stub it so route tests don't need a backend.
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('no backend in this test'))));
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('routes', () => {
   it('redirects to /login when there is no session', async () => {
@@ -17,17 +21,18 @@ describe('routes', () => {
     expect(router.state.location.pathname).toBe('/login');
   });
 
-  it('renders a PlaceholderPage for a module with no backend yet', async () => {
+  it('renders a not-found page for an unknown address when signed in', async () => {
     localStorage.setItem('cpf_token', 'test-token');
-    // /packing: still genuinely unimplemented (no API) as of this test —
-    // /inventory used to be the example here but is real now (see
-    // docs/changelog.md's Inventory/stock_ledger entry).
-    const router = createMemoryRouter(routes, { initialEntries: ['/packing'] });
+    const router = createMemoryRouter(routes, { initialEntries: ['/no-such-module'] });
     render(<RouterProvider router={router} />);
 
-    expect(await screen.findByRole('heading', { name: 'Packing' })).toBeInTheDocument();
-    expect(screen.getByText('This module is not implemented yet.')).toBeInTheDocument();
-    localStorage.clear();
+    expect(await screen.findByRole('heading', { name: 'Page not found' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to dashboard' })).toBeInTheDocument();
+  });
+
+  it('has a real screen for every navigation entry', () => {
+    const missing = navigationItems.filter((item) => item.path !== '' && !(item.path in pages)).map((item) => item.path);
+    expect(missing).toEqual([]);
   });
 
   it('covers every navigationItems entry with a route', () => {
@@ -42,6 +47,12 @@ describe('routes', () => {
     expect(childPaths).toContain('master-data');
     expect(childPaths).toContain('production');
     expect(childPaths).toContain('audit-activity');
-    expect(childPaths).toHaveLength(20); // 1 index + 19 named routes (18 from docs/design.md §3 + Master Data)
+    expect(childPaths).toContain('*'); // not-found fallback
+    expect(childPaths).toHaveLength(21); // 1 index + 19 named routes + the not-found fallback
+  });
+
+  it('groups navigation into labelled sections', () => {
+    const groups = [...new Set(navigationItems.map((i) => i.group))];
+    expect(groups).toEqual(['Overview', 'Inbound', 'Factory', 'Outbound', 'Support', 'Insight', 'System']);
   });
 });

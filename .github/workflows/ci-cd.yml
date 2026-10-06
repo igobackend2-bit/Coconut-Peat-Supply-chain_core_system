@@ -37,6 +37,14 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build Docker Images
+        # docker-compose requires these variables to be set even for `build`; they are not used
+        # at build time, so placeholders are enough here. Real values live in the runtime
+        # environment / Kubernetes Secret, never in the repository.
+        env:
+          MQTT_BROKER: ssl://placeholder.invalid:8883
+          MQTT_USERNAME: placeholder
+          MQTT_PASSWORD: placeholder
+          DOCKERHUB_USERNAME: harith2001
         run: |
           docker-compose build
 

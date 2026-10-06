@@ -48,10 +48,10 @@ export function ProductionPage() {
   const [outputQty, setOutputQty] = useState('');
 
   async function loadBatches() {
-    setLoading(true);
-    setLoadError(null);
+    // Initial state is already loading=true; reloads after an action keep showing the current rows.
     try {
       setBatches(await apiGet<ProductionBatch[]>('/production-batches'));
+      setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'Failed to load');
     } finally {
@@ -60,6 +60,8 @@ export function ProductionPage() {
   }
 
   useEffect(() => {
+    // loadBatches() only sets state after its await resolves, never synchronously inside this effect.
+    // oxlint-disable-next-line react/set-state-in-effect
     loadBatches();
     apiGet<{ id: string; sku: string }[]>('/products')
       .then((data) => setProducts(data.map((p) => ({ value: p.id, label: p.sku }))))

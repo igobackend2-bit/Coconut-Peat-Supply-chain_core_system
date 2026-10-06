@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuditModule } from './common/audit/audit.module';
 import { DrizzleModule } from './db/drizzle.module';
 import { HealthController } from './health/health.controller';
@@ -22,6 +24,17 @@ import { RawMaterialModule } from './modules/raw-material/raw-material.module';
 import { ProductionModule } from './modules/production/production.module';
 import { QualityModule } from './modules/quality/quality.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { PackingModule } from './modules/packing/packing.module';
+import { SalesModule } from './modules/sales/sales.module';
+import { DispatchModule } from './modules/dispatch/dispatch.module';
+import { ExportModule } from './modules/export/export.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { WorkforceModule } from './modules/workforce/workforce.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { MemoryModule } from './modules/memory/memory.module';
+import { AiModule } from './modules/ai/ai.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { ActivityModule } from './modules/activity/activity.module';
 
 @Module({
   imports: [
@@ -29,6 +42,8 @@ import { InventoryModule } from './modules/inventory/inventory.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // Blanket per-IP ceiling for every route; login/register/change-password set a much tighter one.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: Number(process.env.RATE_LIMIT ?? 600) }]),
     DrizzleModule,
     AuditModule,
     IdentityModule,
@@ -50,7 +65,19 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     ProductionModule,
     QualityModule,
     InventoryModule,
+    PackingModule,
+    SalesModule,
+    DispatchModule,
+    ExportModule,
+    MaintenanceModule,
+    WorkforceModule,
+    FinanceModule,
+    MemoryModule,
+    AiModule,
+    ReportsModule,
+    ActivityModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

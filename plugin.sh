@@ -9,6 +9,18 @@ if [ -z "$PLUGIN_NAME" ]; then
   exit 1
 fi
 
+# Credentials come from the environment (or a gitignored .env next to this
+# script) — never from this file. See .env.example.
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$ROOT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ROOT_DIR/.env"
+  set +a
+fi
+: "${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME (see .env.example)}"
+: "${DOCKERHUB_TOKEN:?Set DOCKERHUB_TOKEN to a Docker Hub access token (see .env.example)}"
+
 ZIP_FILE="plugins/${PLUGIN_NAME}.zip"
 UNZIP_DIR="plugins/unzipped_${PLUGIN_NAME}"
 PLUGIN_DIR="${UNZIP_DIR}/${PLUGIN_NAME}"
@@ -50,7 +62,7 @@ unset DOCKER_HOST
 
 # Docker Login
 echo "Logging into Docker..."
-if echo "harith2128" | docker login -u "harith2001" --password-stdin; then
+if printf '%s' "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin; then
   echo "Docker login successful."
 else
   echo "Failed to login to Docker. Exiting..."
@@ -58,7 +70,7 @@ else
 fi
 
 # Build and push Docker image
-IMAGE_NAME="harith2001/coconut-peat-supply-chain_core_system-${PLUGIN_NAME}:latest"
+IMAGE_NAME="${DOCKERHUB_USERNAME}/coconut-peat-supply-chain_core_system-${PLUGIN_NAME}:latest"
 docker build -t "${PLUGIN_NAME}_plugin" -f "$DOCKERFILE" . || { echo "Docker build failed. Exiting..."; exit 1; }
 
 # Push the Docker image

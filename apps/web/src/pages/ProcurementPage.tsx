@@ -1,3 +1,4 @@
+import { PageHeader } from '../components/ui';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, ApiError } from '../lib/api';
@@ -48,10 +49,10 @@ function PurchaseOrdersPanel() {
   const [formError, setFormError] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
-    setLoadError(null);
+    // Initial state is already loading=true; reloads after an action keep showing the current rows.
     try {
       setOrders(await apiGet<PurchaseOrder[]>('/purchase-orders'));
+      setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'Failed to load');
     } finally {
@@ -60,6 +61,8 @@ function PurchaseOrdersPanel() {
   }
 
   useEffect(() => {
+    // load() only sets state after its await resolves, never synchronously inside this effect.
+    // oxlint-disable-next-line react/set-state-in-effect
     load();
     apiGet<{ id: string; name: string }[]>('/suppliers')
       .then((data) => setSuppliers(data.map((s) => ({ value: s.id, label: s.name }))))
@@ -107,7 +110,7 @@ function PurchaseOrdersPanel() {
     <section>
       <div className={listStyles.header}>
         <div>
-          <h1>Purchase Orders</h1>
+          <h2>Purchase Orders</h2>
           <p className={listStyles.description}>
             Orders over ₹100,000 require approval (a separate permission from creating one) before they can be received against.
           </p>
@@ -215,7 +218,7 @@ function PurchaseOrdersPanel() {
 export function ProcurementPage() {
   return (
     <section>
-      <h1>Procurement</h1>
+      <PageHeader title="Procurement" description="Purchase orders over the approval threshold wait for a manager decision; goods receipts record what actually arrived." />
       <Tabs
         tabs={[
           { label: 'Purchase Orders', content: <PurchaseOrdersPanel /> },

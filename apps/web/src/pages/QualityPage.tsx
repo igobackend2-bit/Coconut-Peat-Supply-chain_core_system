@@ -50,10 +50,10 @@ export function QualityPage() {
   const [submittingResult, setSubmittingResult] = useState(false);
 
   async function loadSamples() {
-    setLoading(true);
-    setLoadError(null);
+    // Initial state is already loading=true; reloads after an action keep showing the current rows.
     try {
       setSamples(await apiGet<QcSample[]>('/qc-samples'));
+      setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'Failed to load');
     } finally {
@@ -62,6 +62,8 @@ export function QualityPage() {
   }
 
   useEffect(() => {
+    // loadSamples() only sets state after its await resolves, never synchronously inside this effect.
+    // oxlint-disable-next-line react/set-state-in-effect
     loadSamples();
     apiGet<ProductionBatch[]>('/production-batches')
       .then((data) => setBatches(data.filter((b) => b.status === 'COMPLETED' || b.status === 'ON_HOLD')))

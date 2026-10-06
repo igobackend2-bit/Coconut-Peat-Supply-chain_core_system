@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiPost, ApiError } from '../lib/api';
 import { setSession, setToken } from '../lib/auth';
+import styles from './Login.module.css';
 
 interface LoginResponse {
   token: string;
@@ -36,39 +37,45 @@ export function Login() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-      <form onSubmit={handleSubmit} style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Coco Pith Factory</h1>
-        <p style={{ margin: 0, color: 'var(--text-muted)' }}>Sign in to continue</p>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', padding: 8, marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ display: 'block', width: '100%', padding: 8, marginTop: 4 }}
-          />
-        </label>
-        {error && (
-          <p role="alert" style={{ color: 'var(--danger)', margin: 0 }}>
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={submitting} style={{ padding: 10 }}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+    <div className={styles.page}>
+      <aside className={styles.brandPanel}>
+        <div className={styles.brandTop}>
+          <img src="/favicon.svg" alt="" width={36} height={36} />
+          <span>Coco Pith Factory</span>
+        </div>
+        <div>
+          <h1 className={styles.headline}>From raw husk to export container, on one record.</h1>
+          <ul className={styles.facts}>
+            <li>Every stock movement is written to an append-only ledger.</li>
+            <li>Nobody can approve their own expense or release a held batch without the right permission.</li>
+            <li>Any batch traces back to its supplier, vehicle and weighbridge reading.</li>
+          </ul>
+        </div>
+        <div className={styles.rings} aria-hidden="true" />
+      </aside>
+
+      <main className={styles.formPanel}>
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <h2>Sign in</h2>
+          <p className={styles.sub}>Use your factory account.</p>
+          <label>
+            <span>Email</span>
+            <input type="email" autoComplete="username" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </label>
+          {error && (
+            <p role="alert" className={styles.error}>
+              {error}
+            </p>
+          )}
+          <button type="submit" disabled={submitting} className={styles.submit}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+      </main>
     </div>
   );
 }

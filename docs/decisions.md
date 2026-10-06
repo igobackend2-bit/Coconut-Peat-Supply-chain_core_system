@@ -380,6 +380,118 @@ time spent learning an unfamiliar library's API under a tight deadline.
 `components/ResourceListPage.tsx`, `pages/Dashboard.tsx`, and the status
 displays in `pages/ProcurementPage.tsx`/`ProductionPage.tsx`/`QualityPage.tsx`.
 
+# ADR-008
+
+**Title:** AI layer ships as rule-based analyzers that only propose; no LLM yet
+**Date:** 2026-10-05
+**Status:** Accepted
+
+**Context:**
+`docs/agents.md` specifies 12 agents, but the LLM provider is still an
+open decision and the roadmap says not to build against it unresolved.
+Leaving the AI screens as placeholders would have left a whole nav
+section empty, while wiring a model in blindly would mean agents acting
+on an unvetted gateway.
+
+**Decision:**
+Implement the registry (A01–A12) and eight deterministic analyzers that
+read live operational data (negative stock, QC holds, overdue
+maintenance, stale approvals, credit-limit breaches, …). A run records
+`ai_runs` and `ai_findings` in status `PROPOSED`; a human acknowledges or
+dismisses each. Agents without an implementation (`analyzer_key IS NULL`)
+are listed but refuse to run (409). The UI states plainly that no
+language model is connected.
+
+**Alternatives considered:**
+Stub chat UI with canned replies (rejected — fake capability); pick an
+LLM provider now (rejected — unresolved Open Decision, needs its own ADR).
+
+**Reason:**
+These analyzers deliver real value today, exercise the agents.md §1/§6
+rule ("AI must never silently modify business data"; proposed ≠
+executed) end to end, and give an LLM layer the same finding/approval
+plumbing to plug into later.
+
+**Consequences:**
+Findings dedupe against pending ones only (an acknowledged finding
+reappears next run if the condition persists — it is still true). Moving
+to an LLM-backed agent means replacing an analyzer function, not the
+surrounding workflow.
+
+**Affected Modules:** `apps/api/src/modules/ai`, `db/schema/ai.schema.ts`,
+`apps/web/src/pages/AiAgentsPage.tsx`, `database/seeds/002-ai-agents.sql`.
+
+---
+
+# ADR-009
+
+**Title:** Finance is operational, not a general ledger; IGO ERP integration deferred
+**Date:** 2026-10-05
+**Status:** Accepted
+
+**Context:**
+`product-requirements.md` §4.15 says Finance should integrate with the
+central IGO ERP rather than create conflicting books. The integration
+protocol is unknown, and the roadmap says to discover it before building.
+
+**Decision:**
+Build only factory-side operational finance: cost centres, expenses
+(approval with segregation of duties), payments against sales/purchase
+orders, computed receivables/payables, and material-only batch costing.
+No double-entry ledger, no tax/GST, no ERP calls.
+
+**Alternatives considered:**
+A full ledger (rejected — would create exactly the conflicting books the
+requirements warn about); skipping Finance (rejected — approvals,
+receivables and costing are needed by Sales, Procurement and Reports).
+
+**Reason:**
+Delivers what the factory needs day to day without guessing at an
+external system.
+
+**Consequences:**
+Batch cost understates true cost (no wages, machine rates or overhead) and
+says so in the API and UI. Payments carry no accounting posting; when the
+ERP protocol is known, an outbound sync can read `expenses`/`payments`.
+
+**Affected Modules:** `apps/api/src/modules/finance`, `db/schema/finance.schema.ts`,
+`apps/web/src/pages/FinancePage.tsx`.
+
+---
+
+# ADR-010
+
+**Title:** Front-end visual system v2: Geist + Phosphor, warm neutrals, one accent
+**Date:** 2026-10-05
+**Status:** Accepted (refines ADR-007)
+
+**Context:**
+ADR-007 chose a custom CSS design system. The first pass looked like a
+generic admin template: system font, equal stat cards, flat tables, bare
+"Loading…" text, Title Case badges, and the stock Vite favicon.
+
+**Decision:**
+Keep the custom CSS tokens but upgrade them: Geist / Geist Mono (variable,
+self-hosted via `@fontsource-variable`), Phosphor icons, warm paper
+neutrals tinted to the accent hue, a single desaturated leaf-green accent
+(status colours stay semantic and separate), tinted shadows, fine grain,
+sentence-case labels, skeleton loading, composed empty/error states,
+visible focus rings, `prefers-reduced-motion` support, a skip link, a 404
+page, a collapsible mobile menu, and route-level code splitting. The
+generic list component gained row actions and expandable nested detail so
+parent/child screens no longer need hand-built pages.
+
+**Alternatives considered:** A component library (still rejected, per
+ADR-007); keeping the system font (rejected — biggest single visual win).
+
+**Consequences:**
+Two small runtime dependencies were added (fonts, icons). Existing
+hand-built workflow pages inherit the new look through shared class names
+rather than being rewritten.
+
+**Affected Modules:** all of `apps/web/src`.
+
+---
 ---
 
 <!--

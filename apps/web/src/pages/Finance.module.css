@@ -1,0 +1,106 @@
+.overview {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 22px;
+}
+
+.statusRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bars li {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.barLabel {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.barTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--neutral-soft);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.over {
+  background: var(--danger);
+}
+
+.barValue {
+  font-size: 13px;
+  font-weight: 550;
+  text-align: right;
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 360px;
+  margin-bottom: 18px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.caveat {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+@media (max-width: 960px) {
+  .overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+.barLabel::first-letter {
+  text-transform: uppercase;
+}

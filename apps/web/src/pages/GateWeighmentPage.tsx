@@ -1,10 +1,11 @@
+import { PageHeader } from '../components/ui';
 import { ResourceListPage } from '../components/ResourceListPage';
 import { Tabs } from '../components/Tabs';
 
 export function GateWeighmentPage() {
   return (
     <section>
-      <h1>Gate &amp; Weighment</h1>
+      <PageHeader title="Gate & Weighment" description="Vehicles, drivers and the weighbridge. A gate entry can only be weighed once; weighments feed Goods Receipts and raw-material traceability." />
       <Tabs
         tabs={[
           {

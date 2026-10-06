@@ -6,24 +6,24 @@ then `product-requirements.md`, `architecture.md`, `decisions.md`, and
 `changelog.md`, before doing anything else. Do not assume prior work was
 completed — verify it against the actual code and database state.
 
-Last updated: 2026-09-30
+Last updated: 2026-10-05
 
 ## Current Version
 
-v0.2.3 (pre-alpha — see `docs/changelog.md` for the version-by-version
+v0.3.1 (pre-alpha — see `docs/changelog.md` for the version-by-version
 history)
 
 ## Current Phase
 
-**Phase 4: Outbound, core started.**
-Phases 0–3 are complete (Documentation & Scaffolding; Foundations/
-Identity/Master Data; Inbound/Procurement/Gate & Weighment/Raw Material;
-Core Production/Quality — see `docs/roadmap.md`). Phase 4 has its
-Inventory core done (append-only `stock_ledger` + computed
-`stock_balances`, retrofitted into Production/Raw Material) plus the
-last Master Data gap (`vendors` API) closed. Packing, Sales/Logistics,
-and Export are still not started. See "Architecture Status" below for
-specifics.
+**Phases 0–5 core complete; Phase 6 partial.** Every one of the 20
+navigation modules now has a real, verified screen and API. Inbound,
+Production/Quality, Inventory, Packing, Sales, Dispatch and Export are done
+to "core" depth (see `docs/roadmap.md` for what each deliberately defers);
+Maintenance and Workforce are done; Finance is **operational only** (no
+general ledger, no IGO ERP integration — ADR-009); Memory is done without
+embeddings; the AI layer is **rule-based analyzers that only propose, with
+no LLM connected** (ADR-008). Reports, Audit & Activity and Settings (users,
+roles, change password) exist. The front end was redesigned (ADR-010).
 
 ## Completed Modules
 
@@ -72,18 +72,91 @@ without any known blocker.
 
 ## Known Bugs
 
-None (no application code exists to have bugs). Separately, the **legacy Go
-system** (`server/`, `plugins/`, `config/`, `kube-config/`, `docker-compose.yml`,
-`plugin.sh`) has known issues flagged in an earlier session:
-- Hardcoded Docker Hub password in `plugin.sh`.
-- Hardcoded Ethereum private key in `server/blockchain.go`.
-- Hardcoded MQTT password in `docker-compose.yml` and
-  `kube-config/core-system.yaml`.
-- These were **not yet fixed** as of this writing (a tooling outage
-  interrupted that work). They should be fixed or the legacy system
-  retired before any production exposure, whichever comes first.
+Open:
+- **Rotate the legacy secrets.** The hardcoded Docker Hub password, HiveMQ MQTT
+  password and Ethereum private key are removed from the working tree (v0.3.1)
+  but are **still in git history** and must be treated as compromised — rotate
+  them (see `docs/security.md`). `.kilo/worktrees/hot-nickel` still holds old copies.
+- **Batch cost is material-only** (no wage/machine/overhead data) — shown as such.
+- **Session token in `localStorage`** (XSS exposure); no SPA-level CSP.
+- **Rate limiting is in-memory, per IP** — needs a shared store for >1 API instance.
+- **`/reports/*` is role-gated, not `finance.read`-gated** (finance KPIs show on the dashboard).
+- Dev-tooling advisories (47, all dev dependencies) — not shipped; production
+  dependencies have 0.
+- `PRODUCTION_MANAGER` (seeded by hand early on) holds only
+  `production.batch.approve`, a code no route uses, so that role can read but not
+  write anything.
+- The dev database contains throwaway data and one dev account,
+  `packing-test@example.com` (SUPER_ADMIN, password set during development) —
+  change its password or deactivate it.
+
+Fixed in v0.3.1: unauthenticated registration; role-less accounts reading business
+data; deactivated users still able to authenticate; permission guard ignoring
+class-level metadata; confidential memory copied into the audit log; no rate
+limiting, headers or CORS scoping; legacy hardcoded secrets in the tree; forward
+traceability stopping at packing; no committed integration tests; vulnerable
+production dependencies; lint warnings.
 
 ## Architecture Status
+
+**Implemented and verified (v0.3.0):** the remaining modules — Export,
+Maintenance, Workforce, Finance, Memory, AI Agents, Reports, Audit &
+Activity, Settings/users — plus a front-end redesign. Verification: 132 of
+133 live API checks passed on the first run (the one miss was my own wrong
+assertion); a rerun passed everything except three checks that depend on
+the first run's data not existing; the whole Export chain, Memory
+versioning, Settings and Finance's self-approval rejection were driven
+through the real UI. Honest limits: no LLM; Finance has no ledger or ERP
+sync; export traceability ends at the product; see "Known Bugs".
+
+
+**Implemented and verified:** Dispatch core — `dispatches`, reusing
+Gate & Weighment's `vehicles`/`drivers` tables directly. Can only be
+created against a `CONFIRMED` sales order; status
+`PENDING → DISPATCHED → DELIVERED`, cancellable from `PENDING` or
+`DISPATCHED`. **Found and fixed a real bug via live testing**: the first
+version's hard `UNIQUE(sales_order_id)` DB constraint meant a single
+cancelled dispatch permanently blocked ever redispatching that order —
+an entirely normal operational flow. Fixed by dropping the column-level
+constraint and moving "at most one active dispatch per order" to a
+service-level check (migration `0011_foamy_husk.sql`). Re-verified live
+both ways post-fix: redispatch-after-cancel now succeeds, a second
+concurrent active dispatch still correctly 409s. Full lifecycle also
+verified: DRAFT-sales-order rejection, duplicate-active-dispatch
+rejection, deliver-before-dispatch rejection (409), the full
+PENDING→DISPATCHED→DELIVERED happy path with delivery notes, and
+audit_events rows for every action. Deferred: `shipments`/
+`delivery_confirmations` as separate tables, `gate_entries.direction =
+OUTBOUND` integration — see `docs/changelog.md` v0.2.6.
+
+**Implemented and verified:** Sales core — `sales_orders` and
+`sales_order_items`. `DRAFT` orders build up freely; credit-limit
+exposure (`SUM` of the customer's other `CONFIRMED` orders + this
+order's total) is only checked at `confirm()`, a hard 409 naming the
+exact projected exposure and limit — not an approval-workflow gate like
+Procurement's PO threshold. `totalAmount` is server-recomputed after
+every item add, never trusted from the client. Verified live end-to-end
+via curl: one order under the customer's ₹150,000.50 limit confirmed
+correctly, a second that would push combined exposure to ₹180,000
+correctly 409'd with the exact numbers in the error; cancel, the
+DRAFT-only item-add guard, and the zero-items confirm guard (400) all
+verified; and in the browser (all three curl-created orders render with
+correct status/total, the CONFIRMED order's line item resolves with the
+correct SKU, zero console errors). Deferred: `quotations`, `invoices`,
+price list lookup, a credit-limit-breach approval override — see
+`docs/changelog.md` v0.2.5.
+
+**Implemented and verified:** Packing core — `packing_orders` and
+`packing_lots`. A packing order can only be created against a `RELEASED`
+production batch (server-enforced 409, not a UI-only rule), status
+lifecycle `PENDING → IN_PROGRESS → COMPLETED`, lot numbers server-
+generated and unique. Verified live end-to-end via curl (full PO → Goods
+Receipt → Raw Material Lot → Production Batch → Release → Packing Order
+→ 2 Lots → Complete chain, plus the 409 against a non-RELEASED batch and
+against adding a lot to a COMPLETED order) and in the browser (both
+curl-created lots render correctly with resolved SKU, the create form's
+batch dropdown correctly only lists RELEASED batches). Deferred: QR code
+generation, pallet/container linkage — see `docs/changelog.md` v0.2.4.
 
 **Implemented and verified:** Phase 4 core — Inventory's `stock_ledger`
 (append-only, DB-trigger enforced) and computed `stock_balances`, plus
@@ -205,11 +278,16 @@ Drizzle to PostgreSQL and returned `{"status":"ok","db":{"ok":1}}`.
 
 ## Database Status
 
-**39 tables exist** across eight domains: Governance (`audit_events`,
+**65 tables exist** across 17 domains (public schema): Governance (`audit_events`,
 `approvals`), Identity (7 tables), Master Data (17 tables), Gate &
 Weighment (4 tables), Procurement (2 tables), Raw Material (1 table),
 Production (3 tables), Quality (2 tables), Inventory (1 table,
-`stock_ledger`) — see `docs/database-schema.md` for the full breakdown. Verified with real inserts/API calls across the
+`stock_ledger`), Packing (2 tables, `packing_orders`/`packing_lots`),
+Sales (2 tables, `sales_orders`/`sales_order_items`), Dispatch (1 table,
+`dispatches`), Export (6), Maintenance (4), Workforce (3), Finance (3),
+Memory (1), AI (3) — see `docs/database-schema.md` for the full
+breakdown. Verified with real
+inserts/API calls across the
 whole FK graph, spanning the Phase 1 Master Data chain (unit → product →
 grade → QC spec; department →
 employee → user → role → permission) and the Phase 2 traceability chain
@@ -247,9 +325,12 @@ catalog + `SUPER_ADMIN` role, re-run whenever new permission codes are
 added — idempotent). `/database/functions` remains empty.
 `docs/database-schema.md` is filled in for Identity, Master Data,
 Governance, Gate & Weighment, Procurement, Raw Material, Production,
-Quality, and Inventory (core: `stock_ledger`) — Sales/Logistics, Packing,
-Export, Maintenance, Workforce, Finance, AI, and Memory domains are
-still to come (see `docs/roadmap.md` Phases 4–6).
+Quality, Inventory (core: `stock_ledger`), Packing (core:
+`packing_orders`/`packing_lots`), Sales (core:
+`sales_orders`/`sales_order_items`), and Dispatch (core: `dispatches`)
+— Export, Maintenance, Workforce, Finance, AI, and Memory domains are
+still to
+come (see `docs/roadmap.md` Phases 4–6).
 
 ## AI Agent Status
 
@@ -265,8 +346,9 @@ event per `docs/actions.md` §4.
 `/tests/{unit,integration,e2e,ai,security}` (repo-root, cross-app) exist
 as empty directories still — `docs/testing.md` is a stub.
 
-`apps/api` has its own Jest setup with 15 passing unit tests across 5
-suites: `health.controller.spec.ts` (1), `audit.interceptor.spec.ts` (5
+`apps/api` has its own Jest setup with 18 passing unit tests across 5
+suites (plus **43 integration tests** against a real database — see
+`docs/testing.md`): `health.controller.spec.ts` (1), `audit.interceptor.spec.ts` (5
 — including the redaction test), `auth-failure-audit.filter.spec.ts` (2),
 `session-auth.guard.spec.ts` (3), `permissions.guard.spec.ts` (4). No
 integration/E2E tests exist yet — `AuthService`/`ProductsService`/
@@ -283,12 +365,14 @@ helper. Still 15 unit tests total (Phase 2 added zero — pure-logic pieces
 like guards already have coverage; Phase 2 had no new pure-logic pieces
 of that kind).
 
-`apps/web` has its own Vitest setup with 5 passing tests:
-`src/app/routes.spec.tsx` (3 — Dashboard renders at index, a module
-route renders PlaceholderPage, every navigationItems entry has a
-matching route) and `src/pages/Dashboard.spec.tsx` (2 — renders API
-status on success, renders an error on failure), both with `fetch`
-mocked so they don't depend on a running backend.
+`apps/web` has its own Vitest setup with 9 passing tests:
+`src/app/routes.spec.tsx` (5 — redirect to login without a session, a
+not-found page for unknown addresses, every navigation entry has a real
+screen, route table covers every entry plus the fallback, navigation is
+grouped into the seven sections) and `src/pages/Dashboard.spec.tsx` (4 —
+API status and KPIs, only non-zero attention items listed, API-unreachable
+error, empty state), both with `fetch` mocked so they don't depend on a
+running backend.
 
 ## Deployment Status
 
@@ -299,6 +383,19 @@ is a stub and needs a Node.js-based deployment story once Phase 1 code
 exists.
 
 ## Next Priorities
+
+**Current (as of v0.3.1), in order:**
+1. **Rotate the leaked legacy credentials** (Docker Hub, HiveMQ, the Ethereum
+   key) — only the owner can; then decide whether to purge git history.
+2. **Phase 8 hardening that remains**: shared rate-limit store, HttpOnly-cookie
+   sessions + CSRF (or an SPA CSP), MFA, backups, tenant isolation.
+3. **Broaden the integration suite**: role × module × action permission matrix,
+   per-mutation audit assertions, browser E2E.
+4. **Resolve the two external unknowns** — the IGO ERP integration protocol
+   (unblocks real Finance) and an LLM provider ADR (unblocks A01/A02/A07/A12).
+5. Remaining deferred items listed per module in `docs/roadmap.md`
+   (quotations/invoices, pallets, QR codes, process steps, tax, price lists).
+
 
 **A full phase-by-phase implementation plan for the entire ERP now
 exists at `docs/roadmap.md`** — read that first for anything beyond the

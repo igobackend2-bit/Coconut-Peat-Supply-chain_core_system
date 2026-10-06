@@ -77,3 +77,96 @@ export const stockMovementTypeEnum = pgEnum('stock_movement_type', [
   'PRODUCTION_OUTPUT',
   'ADJUSTMENT',
 ]);
+
+// Phase 4 — Packing (docs/roadmap.md)
+
+export const packingOrderStatusEnum = pgEnum('packing_order_status', [
+  'PENDING',
+  'IN_PROGRESS',
+  'COMPLETED',
+  'CANCELLED',
+]);
+
+export const packingLotQcStatusEnum = pgEnum('packing_lot_qc_status', [
+  'PENDING',
+  'PASSED',
+  'FAILED',
+]);
+
+// Phase 4 — Sales (docs/roadmap.md)
+
+export const salesOrderStatusEnum = pgEnum('sales_order_status', [
+  'DRAFT',
+  'CONFIRMED',
+  'CANCELLED',
+]);
+
+// Phase 4 — Dispatch (docs/roadmap.md)
+
+export const dispatchStatusEnum = pgEnum('dispatch_status', [
+  'PENDING',
+  'DISPATCHED',
+  'DELIVERED',
+  'CANCELLED',
+]);
+
+// Phase 4 — Export
+
+export const proformaStatusEnum = pgEnum('proforma_status', ['DRAFT', 'ISSUED', 'CONVERTED', 'CANCELLED']);
+export const commercialInvoiceStatusEnum = pgEnum('commercial_invoice_status', ['ISSUED', 'PAID', 'CANCELLED']);
+export const containerStatusEnum = pgEnum('container_status', [
+  'BOOKED',
+  'LOADED',
+  'IN_TRANSIT',
+  'ARRIVED',
+  'DELIVERED',
+  'CANCELLED',
+]);
+
+// Phase 5 — Maintenance / Workforce / Finance
+
+export const severityEnum = pgEnum('severity', ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
+export const breakdownStatusEnum = pgEnum('breakdown_status', ['OPEN', 'IN_REPAIR', 'RESOLVED']);
+export const workOrderTypeEnum = pgEnum('work_order_type', ['PREVENTIVE', 'CORRECTIVE']);
+export const workOrderStatusEnum = pgEnum('work_order_status', ['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']);
+
+export const attendanceStatusEnum = pgEnum('attendance_status', ['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY']);
+
+export const expenseCategoryEnum = pgEnum('expense_category', [
+  'RAW_MATERIAL',
+  'LABOUR',
+  'UTILITIES',
+  'MAINTENANCE',
+  'LOGISTICS',
+  'PACKAGING',
+  'OTHER',
+]);
+export const expenseStatusEnum = pgEnum('expense_status', ['SUBMITTED', 'APPROVED', 'REJECTED']);
+export const paymentDirectionEnum = pgEnum('payment_direction', ['INCOMING', 'OUTGOING']);
+
+// Phase 6 — Memory / AI (docs/memory.md §3, docs/agents.md)
+
+export const memoryTypeEnum = pgEnum('memory_type', [
+  'FACT',
+  'DECISION',
+  'INSTRUCTION',
+  'PREFERENCE',
+  'CONFIGURATION',
+  'SOP',
+  'PRODUCT_KNOWLEDGE',
+  'SUPPLIER_KNOWLEDGE',
+  'CUSTOMER_KNOWLEDGE',
+  'INCIDENT',
+  'LESSON',
+  'ASSUMPTION',
+  'OBSERVATION',
+  'OPEN_ISSUE',
+  'TASK_CONTEXT',
+]);
+export const memoryStatusEnum = pgEnum('memory_status', ['ACTIVE', 'ARCHIVED', 'SUPERSEDED']);
+export const memorySensitivityEnum = pgEnum('memory_sensitivity', ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL']);
+
+export const aiAgentStatusEnum = pgEnum('ai_agent_status', ['ENABLED', 'DISABLED']);
+export const aiRunStatusEnum = pgEnum('ai_run_status', ['COMPLETED', 'FAILED']);
+export const aiFindingSeverityEnum = pgEnum('ai_finding_severity', ['INFO', 'WARNING', 'CRITICAL']);
+export const aiFindingStatusEnum = pgEnum('ai_finding_status', ['PROPOSED', 'ACKNOWLEDGED', 'DISMISSED']);
